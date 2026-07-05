@@ -1,0 +1,23 @@
+{
+  "name": "delta-admin-backend",
+  "version": "1.0.0",
+  "description": "Fastify backend for DeltaAI Admin",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "npx ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.26.2",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/pg": "^8.11.4",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.3"
+  }
+}
