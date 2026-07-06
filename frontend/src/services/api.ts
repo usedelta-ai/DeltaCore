@@ -168,6 +168,7 @@ export const api = {
     if (agente) params.append('agente', agente);
     return request<Lead[]>(`/api/leads?${params.toString()}`);
   },
+  getLeadById: (id: number) => request<Lead>(`/api/leads/${id}`),
   createLead: (data: Partial<Lead>) => request<Lead>('/api/leads', {
     method: 'POST',
     body: JSON.stringify(data),

@@ -3,6 +3,7 @@ import { Lead } from '../../domain/entities/Lead';
 
 export interface LeadUsecases {
   getLeads(user: UserSession, filters?: { empresaId?: number; agentId?: number }): Promise<Lead[]>;
+  getLeadById(user: UserSession, id: number): Promise<Lead | null>;
   createLead(user: UserSession, lead: Omit<Lead, 'id'>): Promise<Lead>;
   updateLead(user: UserSession, id: number, lead: Partial<Lead>): Promise<Lead>;
   deleteLead(user: UserSession, id: number): Promise<boolean>;

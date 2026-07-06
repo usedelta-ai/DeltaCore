@@ -20,6 +20,18 @@ export class LeadUsecasesImpl implements LeadUsecases {
     return this.db.getLeads(companyId, filters?.agentId);
   }
 
+  async getLeadById(user: UserSession, id: number): Promise<Lead | null> {
+    const lead = await this.db.getLeadById(id);
+    if (!lead) return null;
+    if (user.role !== 'superadmin') {
+      const agent = await this.db.getAgentById(lead.agent_id);
+      if (!agent || agent.empresa_id !== user.companyId) {
+        throw new Error('Unauthorized: You do not have access to this company\'s resources');
+      }
+    }
+    return lead;
+  }
+
   async createLead(user: UserSession, lead: Omit<Lead, 'id'>): Promise<Lead> {
     if (lead.status && !isValidLeadStatus(lead.status)) {
       throw new Error(`Invalid status "${lead.status}". Allowed: NOVO, HUMANO, FINALIZADO, CONCLUIDO, CANCELADO`);

@@ -159,6 +159,17 @@ export class MainController {
     }
   }
 
+  async getLeadById(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    const id = parseInt(request.params.id, 10);
+    try {
+      const data = await this.leadUsecases.getLeadById(request.user!, id);
+      if (!data) return reply.status(404).send({ error: 'Lead not found' });
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to fetch lead.' });
+    }
+  }
+
   async createLead(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
     try {
       const data = await this.leadUsecases.createLead(request.user!, request.body as any);

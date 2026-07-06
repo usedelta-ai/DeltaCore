@@ -26,6 +26,7 @@ export async function setupRoutes(app: FastifyInstance, controller: MainControll
 
   // Leads
   app.get('/api/leads', (req, rep) => controller.getLeads(req, rep));
+  app.get('/api/leads/:id', (req: any, rep) => controller.getLeadById(req, rep));
   app.post('/api/leads', (req: any, rep) => controller.createLead(req, rep));
   app.put('/api/leads/:id', (req: any, rep) => controller.updateLead(req, rep));
   app.delete('/api/leads/:id', (req: any, rep) => controller.deleteLead(req, rep));

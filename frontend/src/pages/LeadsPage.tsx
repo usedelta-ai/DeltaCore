@@ -383,43 +383,59 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     return true;
   });
 
-  // Load and poll chat history when fullscreen modal is active
+  // Load and poll chat history + lead data when fullscreen modal is active
+  const leadModalIdRef = useRef<number | null>(null);
   useEffect(() => {
-    let ticker: any;
-    if (selectedLeadForModal) {
-      const loadHistory = async () => {
-        setLoadingModalChat(true);
-        try {
-          const res = await api.getLeadHistory(selectedLeadForModal.id);
-          setModalChatHistory(res.messages || []);
-        } catch (err) {
-          console.error('Erro ao carregar chat do lead:', err);
-        } finally {
-          setLoadingModalChat(false);
-        }
-      };
-      loadHistory();
-
-      ticker = setInterval(async () => {
-        try {
-          const res = await api.getLeadHistory(selectedLeadForModal.id);
-          const newMessages = res.messages || [];
-          setModalChatHistory(prev => {
-            if (prev.length !== newMessages.length) return newMessages;
-            if (prev.length > 0 && newMessages.length > 0) {
-              const prevLast = prev[prev.length - 1];
-              const newLast = newMessages[newMessages.length - 1];
-              if (prevLast.id !== newLast.id || prevLast.content !== newLast.content) {
-                return newMessages;
-              }
-            }
-            return prev;
-          });
-        } catch (_) {}
-      }, 3000);
+    const leadId = selectedLeadForModal?.id ?? null;
+    if (!leadId) {
+      leadModalIdRef.current = null;
+      return;
     }
+    leadModalIdRef.current = leadId;
+
+    const loadInitial = async () => {
+      setLoadingModalChat(true);
+      try {
+        const [historyRes, leadRes] = await Promise.all([
+          api.getLeadHistory(leadId),
+          api.getLeadById(leadId),
+        ]);
+        setModalChatHistory(historyRes.messages || []);
+        if (leadRes) setSelectedLeadForModal(leadRes);
+      } catch (err) {
+        console.error('Erro ao carregar dados do lead:', err);
+      } finally {
+        setLoadingModalChat(false);
+      }
+    };
+    loadInitial();
+
+    const ticker = setInterval(async () => {
+      const currentId = leadModalIdRef.current;
+      if (!currentId) return;
+      try {
+        const [historyRes, leadRes] = await Promise.all([
+          api.getLeadHistory(currentId),
+          api.getLeadById(currentId),
+        ]);
+        const newMessages = historyRes.messages || [];
+        setModalChatHistory(prev => {
+          if (prev.length !== newMessages.length) return newMessages;
+          if (prev.length > 0 && newMessages.length > 0) {
+            const prevLast = prev[prev.length - 1];
+            const newLast = newMessages[newMessages.length - 1];
+            if (prevLast.id !== newLast.id || prevLast.content !== newLast.content) {
+              return newMessages;
+            }
+          }
+          return prev;
+        });
+        if (leadRes) setSelectedLeadForModal(leadRes);
+      } catch (_) {}
+    }, 3000);
+
     return () => clearInterval(ticker);
-  }, [selectedLeadForModal]);
+  }, [selectedLeadForModal?.id]);
 
   // Reset initial load status when selected lead changes
   useEffect(() => {
