@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { api, Agent } from '../services/api';
+import { api } from '../services/api';
+import type { Agent } from '../services/api';
 
-export function useAgents() {
+export function useAgents(token: string | null) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +56,12 @@ export function useAgents() {
   };
 
   useEffect(() => {
-    fetchAgents();
-  }, []);
+    if (token) {
+      fetchAgents();
+    } else {
+      setAgents([]);
+    }
+  }, [token]);
 
   return {
     agents,

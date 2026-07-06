@@ -61,4 +61,47 @@ export class EvolutionAdapter implements EvolutionAPIPort {
       })
     });
   }
+
+  async sendTextMessage(instanceName: string, number: string, text: string, quoted?: string): Promise<any> {
+    const body: any = {
+      number,
+      text,
+      delay: 1200,
+      linkPreview: true
+    };
+    if (quoted) {
+      body.quoted = { text: quoted };
+    }
+    return evolutionRequest(`/message/sendText/${instanceName}`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  }
+
+  async sendMediaMessage(instanceName: string, number: string, mediaType: string, mediaBase64: string, options?: { caption?: string; fileName?: string; delay?: number }): Promise<any> {
+    const body: any = {
+      number,
+      mediatype: mediaType,
+      media: mediaBase64,
+      delay: options?.delay ?? 1200
+    };
+    if (options?.caption) body.caption = options.caption;
+    if (options?.fileName) body.fileName = options.fileName;
+    return evolutionRequest(`/message/sendMedia/${instanceName}`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  }
+
+  async sendWhatsAppAudio(instanceName: string, number: string, audioBase64: string, options?: { delay?: number }): Promise<any> {
+    const body: any = {
+      number,
+      audio: audioBase64,
+      delay: options?.delay ?? 1200
+    };
+    return evolutionRequest(`/message/sendWhatsAppAudio/${instanceName}`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  }
 }

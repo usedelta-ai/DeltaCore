@@ -33,10 +33,22 @@ export async function setupRoutes(app: FastifyInstance, controller: MainControll
   // Chat History / Messages
   app.get('/api/agents/:agentId/history', (req: any, rep) => controller.getAgentHistory(req, rep));
   app.get('/api/leads/:leadId/history', (req: any, rep) => controller.getLeadHistory(req, rep));
+  app.get('/api/leads/:leadId/agent-history', (req: any, rep) => controller.getLeadAgentHistory(req, rep));
   app.get('/api/messages/:id/media', (req: any, rep) => controller.getMessageMedia(req, rep));
+  app.post('/api/leads/:leadId/send-message', (req: any, rep) => controller.sendMessage(req, rep));
 
   // Evolution API
   app.get('/api/evolution/instances', (req, rep) => controller.getEvolutionInstances(req, rep));
   app.get('/api/evolution/connection-state/:instanceName', (req: any, rep) => controller.getEvolutionConnectionState(req, rep));
   app.get('/api/evolution/connect/:instanceName', (req: any, rep) => controller.connectEvolution(req, rep));
+  app.get('/api/media/:instanceName/:messageId', (req: any, rep) => controller.getMediaByWhatsAppId(req, rep));
+
+  // Authentication (Public)
+  app.post('/api/auth/login', (req: any, rep) => controller.login(req, rep));
+
+  // Users (Protected)
+  app.get('/api/users', (req, rep) => controller.getUsers(req, rep));
+  app.post('/api/users', (req: any, rep) => controller.createUser(req, rep));
+  app.put('/api/users/:id', (req: any, rep) => controller.updateUser(req, rep));
+  app.delete('/api/users/:id', (req: any, rep) => controller.deleteUser(req, rep));
 }

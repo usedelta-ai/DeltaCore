@@ -8,17 +8,20 @@ export function getBoardUrl(empresaId: number, empresaName: string): string {
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_URL}${path}`;
-  const role = localStorage.getItem('user-role') || 'superadmin';
-  const companyId = localStorage.getItem('user-company-id') || '';
+  const token = localStorage.getItem('auth-token') || '';
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'x-user-role': role,
-    ...options?.headers,
   };
 
-  if (companyId) {
-    headers['x-user-company-id'] = companyId;
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  if (options?.headers) {
+    Object.entries(options.headers).forEach(([k, v]) => {
+      headers[k] = v;
+    });
   }
 
   const response = await fetch(url, {
@@ -59,6 +62,7 @@ export interface Agent {
   search_data?: any;
   validate?: boolean;
   validate_data?: any;
+  evolution_status?: string;
 }
 
 export interface FollowUpSetting {
@@ -156,7 +160,12 @@ export const api = {
   }),
 
   // Leads
-  getLeads: () => request<Lead[]>('/api/leads'),
+  getLeads: (empresa?: string, agente?: string) => {
+    const params = new URLSearchParams();
+    if (empresa) params.append('empresa', empresa);
+    if (agente) params.append('agente', agente);
+    return request<Lead[]>(`/api/leads?${params.toString()}`);
+  },
   createLead: (data: Partial<Lead>) => request<Lead>('/api/leads', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -172,10 +181,45 @@ export const api = {
   // Messages History
   getAgentHistory: (agentId: number) => request<HistoryResponse>(`/api/agents/${agentId}/history`),
   getLeadHistory: (leadId: number) => request<HistoryResponse>(`/api/leads/${leadId}/history`),
+  getLeadAgentHistory: (leadId: number) => request<HistoryResponse>(`/api/leads/${leadId}/agent-history`),
   getMessageMedia: (messageId: number) => request<{ base64: string }>(`/api/messages/${messageId}/media`),
+  sendLeadMessage: (leadId: number, text: string, options?: { messageType?: string; mediaBase64?: string; fileName?: string; quotedMessageId?: number }) => request<any>(`/api/leads/${leadId}/send-message`, {
+    method: 'POST',
+    body: JSON.stringify({ message: text, ...options })
+  }),
 
   // Evolution API
   getEvolutionInstances: () => request<any[]>('/api/evolution/instances'),
   getEvolutionConnectionState: (instanceName: string) => request<any>(`/api/evolution/connection-state/${instanceName}`),
   connectEvolutionInstance: (instanceName: string) => request<any>(`/api/evolution/connect/${instanceName}`),
+  getMediaByWhatsAppId: (instanceName: string, messageId: string) => request<{ base64: string }>(`/api/media/${instanceName}/${messageId}`),
+
+  // Users & Auth
+  login: (data: any) => request<any>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  getUsers: () => request<User[]>('/api/users'),
+  createUser: (data: Partial<User>) => request<User>('/api/users', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updateUser: (id: number, data: Partial<User>) => request<User>(`/api/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  deleteUser: (id: number) => request<{ message: string }>(`/api/users/${id}`, {
+    method: 'DELETE',
+  }),
 };
+
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: 'superadmin' | 'manager' | 'employee';
+  empresa_id?: number | null;
+  active: boolean;
+  password?: string;
+  created_at?: string;
+}

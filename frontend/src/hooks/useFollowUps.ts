@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { api, FollowUpSetting } from '../services/api';
+import { api } from '../services/api';
+import type { FollowUpSetting } from '../services/api';
 
-export function useFollowUps() {
+export function useFollowUps(token: string | null) {
   const [followUps, setFollowUps] = useState<FollowUpSetting[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +56,12 @@ export function useFollowUps() {
   };
 
   useEffect(() => {
-    fetchFollowUps();
-  }, []);
+    if (token) {
+      fetchFollowUps();
+    } else {
+      setFollowUps([]);
+    }
+  }, [token]);
 
   return {
     followUps,

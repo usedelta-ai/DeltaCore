@@ -14,6 +14,7 @@ services:
       - NODE_ENV=development
       - EVOLUTION_API_URL=${EVOLUTION_API_URL}
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - PASS_KEY=${PASS_KEY}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: always

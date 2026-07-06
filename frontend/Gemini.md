@@ -4,31 +4,33 @@ Este arquivo define os padrões arquiteturais, diretrizes de código e estilo vi
 
 ---
 
-## 1. Arquitetura de Pastas e Componentização Atômica
+## 1. Arquitetura de Pastas e Componentização Claramente Definida
 
-Utilizamos o conceito de **Atomic Design** adaptado para React, permitindo que os componentes sejam altamente reutilizáveis, modulares e fáceis de testar.
+Em vez da nomenclatura abstrata do Atomic Design (Atoms/Molecules/Organisms), organizamos nossos componentes de forma intuitiva, baseada na **responsabilidade e complexidade**:
 
 ```text
 src/
 ├── assets/          # Arquivos estáticos (imagens, SVGs, fontes)
-├── components/      # Componentes organizados por nível atômico
-│   ├── atoms/       # Elementos básicos (botões, inputs, labels, ícones)
-│   ├── molecules/   # Combinações simples de átomos (campo de busca, item de lista)
-│   ├── organisms/   # Estruturas complexas (sidebar, navbar, formulários, chat widget)
-│   └── templates/   # Layouts de página (DashboardLayout, AuthLayout)
-├── pages/           # Páginas completas da aplicação (instâncias de templates e organismos)
-├── services/        # Clientes de API, adaptadores HTTP e gateways de integração
-├── hooks/           # Custom hooks compartilhados (useAuth, useTheme, etc.)
-├── context/         # Provedores de estado global (Context API)
-├── styles/          # Tokens globais de CSS, variáveis e reset
-└── utils/           # Funções utilitárias puras
+├── components/      # Componentes de interface organizados por escopo
+│   ├── ui/          # Componentes visuais básicos e reutilizáveis (e.g., Botões, Badges, Modais, Skeletons)
+│   ├── features/    # Componentes acoplados a regras de negócio e dados (e.g., ChatContainer, LoginMock, renderizadores de mensagens)
+│   └── layouts/     # Componentes estruturais de layout de página (e.g., Sidebar, Layout Geral)
+├── pages/           # Páginas da aplicação (orquestram componentes e carregamento de dados)
+├── services/        # Clientes de API, adaptadores HTTP e integrações
+├── hooks/           # Custom hooks para lógica de negócios e estado
+└── styles/          # Tokens globais de CSS e variáveis
 ```
 
-### Regras dos Componentes Atômicos:
-*   **Atoms**: Não devem conter regras de negócio nem estados complexos do domínio. Devem receber dados e callbacks via props.
-*   **Molecules**: Gerenciam apenas estados internos simples (e.g., aberto/fechado, foco).
-*   **Organisms**: Podem interagir com hooks de serviços ou contexts, mas devem focar na composição visual.
-*   **Pages**: São responsáveis por inicializar a busca de dados, injetar estados nos componentes e estruturar as rotas.
+### Regras dos Componentes:
+*   **UI Components**: Devem ser puros e sem regras de negócio ou chamadas de API. São customizáveis apenas via `props`.
+*   **Feature Components**: Podem ler estados globais, hooks de API e lidar com lógica específica de features (e.g., chat, login mock).
+*   **Layout Components**: Orquestram a estrutura visual de cabeçalhos, sidebars e grids de exibição.
+*   **Pages**: Cada arquivo na pasta `pages/` representa uma visualização inteira do painel, separada por responsabilidade de tela (e.g. `EmpresasPage.tsx`).
+
+### 1.1. Separação de Páginas e Roteamento
+*   **Páginas Desacopladas**: O arquivo central `App.tsx` deve funcionar apenas como orquestrador geral de layout, menu de navegação lateral (Sidebar), barra de topo (Header) e controle de rotas de alto nível.
+*   **Hash Routing/Navigation**: As rotas e navegação de páginas devem ser gerenciadas de forma declarativa e modular (e.g., mapeando a rota/hash para a renderização do componente correspondente da página importada de `src/pages/`). Evite colocar formulários e tabelas complexas de páginas diferentes dentro do mesmo arquivo `App.tsx`.
+*   **Interface das Páginas**: Páginas devem expor métodos limpos e receber propriedades globais do estado de sessão (como `companyId` e `hasWritePermission`) para controlar permissões locais de leitura/escrita de forma coerente.
 
 ---
 

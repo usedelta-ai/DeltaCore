@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { api, Empresa } from '../services/api';
+import { api } from '../services/api';
+import type { Empresa } from '../services/api';
 
-export function useEmpresas() {
+export function useEmpresas(token: string | null) {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +56,12 @@ export function useEmpresas() {
   };
 
   useEffect(() => {
-    fetchEmpresas();
-  }, []);
+    if (token) {
+      fetchEmpresas();
+    } else {
+      setEmpresas([]);
+    }
+  }, [token]);
 
   return {
     empresas,

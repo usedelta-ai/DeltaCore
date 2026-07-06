@@ -1,44 +1,68 @@
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Building2, Users, ClipboardList,
-  MessageSquare, Plus, Pencil, Trash2, X,
-  FolderOpen, AlertCircle, UserCheck, Menu, Search
+  MessageSquare, Plus, AlertCircle, UserCheck, Menu, UserCog
 } from 'lucide-react';
-import { api, getBoardUrl } from './services/api';
-import type { Empresa, Agent, FollowUpSetting, Lead, ChatMessage } from './services/api';
-import { ConfirmationModal } from './components/Modal';
-import { Badge } from './components/atoms/Badge';
-import { EditorWrapper } from './components/atoms/EditorWrapper';
-import { ToolResultCollapsible } from './components/molecules/ToolResultCollapsible';
-import { SkeletonView } from './components/molecules/SkeletonView';
-import { MediaMessageRenderer } from './components/organisms/MediaMessageRenderer';
-import { LoginMock } from './components/organisms/LoginMock';
+import { api } from './services/api';
+import type { Agent, ChatMessage, Lead } from './services/api';
+import { SkeletonView } from './components/ui/SkeletonView';
+import { LoginScreen } from './components/features/LoginScreen';
 
-import { useAuthMock } from './hooks/useAuthMock';
 import { useEmpresas } from './hooks/useEmpresas';
 import { useAgents } from './hooks/useAgents';
 import { useLeads } from './hooks/useLeads';
 import { useFollowUps } from './hooks/useFollowUps';
 
-type Tab = 'empresas' | 'agents' | 'follow-ups' | 'leads' | 'messages';
+// Pages
+import { EmpresasPage } from './pages/EmpresasPage';
+import { AgentsPage } from './pages/AgentsPage';
+import { FollowUpsPage } from './pages/FollowUpsPage';
+import { LeadsPage } from './pages/LeadsPage';
+import { MessagesPage } from './pages/MessagesPage';
+import { UsersPage } from './pages/UsersPage';
+
+type Tab = 'empresas' | 'agents' | 'follow-ups' | 'leads' | 'messages' | 'users';
 
 export default function App() {
-  const { role, companyId, isSuperAdmin, isManager, isEmployee, hasWritePermission } = useAuthMock();
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('auth-token'));
+  const [user, setUser] = useState<{ id: number; name: string; email: string; role: string; empresa_id?: number | null; empresa_name?: string | null; empresa_logo?: string | null } | null>(() => {
+    const cached = localStorage.getItem('auth-user');
+    return cached ? JSON.parse(cached) : null;
+  });
 
-  const { empresas, loading: loadingEmp, createEmpresa, updateEmpresa, deleteEmpresa } = useEmpresas();
-  const { agents, loading: loadingAg, createAgent, updateAgent, deleteAgent } = useAgents();
-  const { leads, loading: loadingLd, createLead, updateLead, deleteLead, refetch: refetchLeads } = useLeads();
-  const { followUps, loading: loadingFl, createFollowUp, updateFollowUp, deleteFollowUp } = useFollowUps();
+  const isSuperAdmin = user?.role === 'superadmin';
+  const companyId = user?.empresa_id || null;
+  const hasWritePermission = user?.role !== 'employee';
+
+  const [filterEmpresaId, setFilterEmpresaId] = useState<number | string>(() => {
+    // Don't read URL params if we're on the messages tab (clean URL)
+    if (window.location.hash.startsWith('#messages')) return '';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('empresa') || '';
+  });
+  const [filterAgentId, setFilterAgentId] = useState<number | string>(() => {
+    if (window.location.hash.startsWith('#messages')) return '';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('agente') || '';
+  });
+
+  const { empresas, loading: loadingEmp, createEmpresa, updateEmpresa, deleteEmpresa } = useEmpresas(token);
+  const { agents, loading: loadingAg, createAgent, updateAgent, deleteAgent } = useAgents(token);
+  const { leads, loading: loadingLd, createLead, updateLead, deleteLead, refetch: refetchLeads } = useLeads(token, filterEmpresaId, filterAgentId);
+  const { followUps, loading: loadingFl, createFollowUp, updateFollowUp, deleteFollowUp } = useFollowUps(token);
+
+  const currentCompany = companyId ? empresas.find(e => e.id === companyId) : null;
+  const systemName = currentCompany ? currentCompany.name : (user?.empresa_name || 'DeltaAI Admin');
+  const systemLogo = currentCompany ? currentCompany.logo : (user?.empresa_logo || null);
 
   const getTabFromHash = (): Tab => {
     const hash = window.location.hash.replace('#', '');
     const tabPart = hash.split('?')[0];
-    const validTabs: Tab[] = ['empresas', 'agents', 'follow-ups', 'leads', 'messages'];
+    const validTabs: Tab[] = ['empresas', 'agents', 'follow-ups', 'leads', 'messages', 'users'];
     if (validTabs.includes(tabPart as Tab)) {
       return tabPart as Tab;
     }
-    return 'empresas';
+    return isSuperAdmin ? 'empresas' : 'agents';
   };
 
   const [activeTab, setActiveTab] = useState<Tab>(getTabFromHash);
@@ -59,12 +83,11 @@ export default function App() {
   const [agentStatus, setAgentStatus] = useState<number>(1);
   const [agentEmpresaId, setAgentEmpresaId] = useState<number>(0);
   const [agentUpsertLead, setAgentUpsertLead] = useState(true);
-  const [agentTranslations, setAgentTranslations] = useState('{}');
-  const [agentSearch, setAgentSearch] = useState(false);
-  const [agentSearchData, setAgentSearchData] = useState('{\n  "itens": [],\n  "filters": {},\n  "schema": {}\n}');
-  const [agentValidate, setAgentValidate] = useState(false);
-  const [agentValidateData, setAgentValidateData] = useState('{\n  "itens": [],\n  "filters": {},\n  "schema": {}\n}');
-  const [agentActiveSubtab, setAgentActiveSubtab] = useState<'prompt' | 'translations' | 'search' | 'validate'>('prompt');
+  const [agentTranslations] = useState('{}');
+  const agentSearch = false;
+  const agentSearchData = '{\n  "itens": [],\n  "filters": {},\n  "schema": {}\n}';
+  const agentValidate = false;
+  const agentValidateData = '{\n  "itens": [],\n  "filters": {},\n  "schema": {}\n}';
 
   const [followOrder, setFollowOrder] = useState<number>(1);
   const [followMessage, setFollowMessage] = useState('');
@@ -82,8 +105,7 @@ export default function App() {
   const [leadSessionId, setLeadSessionId] = useState('');
   const [leadCustomProperties, setLeadCustomProperties] = useState('{}');
 
-  const [filterEmpresaId, setFilterEmpresaId] = useState<number | string>('');
-  const [filterAgentId, setFilterAgentId] = useState<number | string>('');
+
 
   const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -92,10 +114,19 @@ export default function App() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [liveMonitoring, setLiveMonitoring] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
-  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
-  const [isMainSidebarCollapsed, setIsMainSidebarCollapsed] = useState(() => getTabFromHash() === 'messages');
+  const [isMainSidebarCollapsed, setIsMainSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebar_collapsed');
+    if (saved !== null) return saved === 'true';
+    return getTabFromHash() === 'messages' || getTabFromHash() === 'leads';
+  });
 
-  const chatContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const toggleSidebar = () => {
+    const nextVal = !isMainSidebarCollapsed;
+    setIsMainSidebarCollapsed(nextVal);
+    localStorage.setItem('sidebar_collapsed', String(nextVal));
+  };
+
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [evolutionInstances, setEvolutionInstances] = useState<any[]>([]);
   const [qrModal, setQrModal] = useState<{
@@ -109,9 +140,8 @@ export default function App() {
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
     id: number;
-    type: Tab;
     name: string;
-  }>({ isOpen: false, id: 0, type: 'empresas', name: '' });
+  }>({ isOpen: false, id: 0, name: '' });
 
   // Tenancy Filter Helpers
   const filterByCompany = <T extends { empresa_id?: number }>(items: T[]): T[] => {
@@ -211,7 +241,7 @@ export default function App() {
   };
 
   const getGroupedFollowUps = () => {
-    const groups: Record<number, { name: string; logo: string | null; agents: Record<number, { name: string; followUps: FollowUpSetting[] }> }> = {};
+    const groups: Record<number, { name: string; logo: string | null; agents: Record<number, { name: string; followUps: any[] }> }> = {};
 
     getFilteredFollowUps().forEach(fl => {
       const agent = agents.find(a => a.id === fl.agent_id);
@@ -245,7 +275,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (activeTab === 'messages') {
+    if (activeTab === 'messages' || activeTab === 'leads') {
       setIsMainSidebarCollapsed(true);
     } else {
       setIsMainSidebarCollapsed(false);
@@ -259,13 +289,33 @@ export default function App() {
   }, [chatHistory, loadingHistory, selectedLeadId]);
 
   useEffect(() => {
-    if (activeTab === 'messages' && selectedLeadId) {
-      const lead = getFilteredLeads().find(l => l.id === selectedLeadId);
-      if (lead && lead.session_id) {
-        window.location.hash = `#messages?session_id=${lead.session_id}`;
+    if (activeTab === 'messages') {
+      // Clear any non-messages query params from the URL
+      if (window.location.search) {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState(null, '', cleanUrl);
+      }
+      // Set the hash with session_id if a lead is selected
+      if (selectedLeadId) {
+        const lead = getFilteredLeads().find(l => l.id === selectedLeadId);
+        if (lead && lead.session_id) {
+          const newHash = `#messages?session_id=${lead.session_id}`;
+          if (window.location.hash !== newHash) {
+            window.history.replaceState(null, '', window.location.pathname + newHash);
+          }
+        } else {
+          window.history.replaceState(null, '', window.location.pathname + '#messages');
+        }
+      } else {
+        window.history.replaceState(null, '', window.location.pathname + '#messages');
       }
     } else {
-      window.location.hash = activeTab;
+      // Leaving messages tab: restore filter params if they exist, set hash to current tab
+      const params = new URLSearchParams();
+      if (filterEmpresaId) params.set('empresa', String(filterEmpresaId));
+      if (filterAgentId) params.set('agente', String(filterAgentId));
+      const search = params.toString() ? `?${params.toString()}` : '';
+      window.history.replaceState(null, '', window.location.pathname + search + `#${activeTab}`);
     }
   }, [activeTab, selectedLeadId]);
 
@@ -275,7 +325,7 @@ export default function App() {
       const loadHistory = async () => {
         setLoadingHistory(true);
         try {
-          const res = await api.getLeadHistory(selectedLeadId);
+          const res = await api.getLeadAgentHistory(selectedLeadId);
           setChatHistory(res.messages);
           setHistorySource(res.source);
           setHistoryTable(res.tableName || '');
@@ -295,7 +345,7 @@ export default function App() {
     if (activeTab === 'messages' && selectedLeadId && liveMonitoring) {
       ticker = setInterval(async () => {
         try {
-          const historyRes = await api.getLeadHistory(selectedLeadId);
+          const historyRes = await api.getLeadAgentHistory(selectedLeadId);
           setChatHistory(historyRes.messages);
           refetchLeads();
         } catch (_) {}
@@ -360,12 +410,6 @@ export default function App() {
       setAgentStatus(1);
       setAgentEmpresaId(isSuperAdmin ? empresas[0]?.id || 0 : (companyId || 0));
       setAgentUpsertLead(true);
-      setAgentTranslations('{}');
-      setAgentSearch(false);
-      setAgentSearchData('{\n  "itens": [],\n  "filters": {},\n  "schema": {}\n}');
-      setAgentValidate(false);
-      setAgentValidateData('{\n  "itens": [],\n  "filters": {},\n  "schema": {}\n}');
-      setAgentActiveSubtab('prompt');
     } else if (activeTab === 'follow-ups') {
       setFollowOrder(1);
       setFollowMessage('');
@@ -403,12 +447,6 @@ export default function App() {
       setAgentStatus(item.status);
       setAgentEmpresaId(item.empresa_id);
       setAgentUpsertLead(item.upsert_lead);
-      setAgentTranslations(JSON.stringify(item.translations || {}, null, 2));
-      setAgentSearch(!!item.search);
-      setAgentSearchData(JSON.stringify(item.search_data || { itens: [], filters: {}, schema: {} }, null, 2));
-      setAgentValidate(!!item.validate);
-      setAgentValidateData(JSON.stringify(item.validate_data || { itens: [], filters: {}, schema: {} }, null, 2));
-      setAgentActiveSubtab('prompt');
     } else if (activeTab === 'follow-ups') {
       setFollowOrder(item.order);
       setFollowMessage(item.message);
@@ -491,22 +529,22 @@ export default function App() {
   };
 
   const confirmDelete = (id: number, name: string) => {
-    setDeleteModal({ isOpen: true, id, type: activeTab, name });
+    setDeleteModal({ isOpen: true, id, name });
   };
 
   const handleDelete = async () => {
     setActionLoading(true);
     try {
-      if (deleteModal.type === 'empresas') {
+      if (activeTab === 'empresas') {
         await deleteEmpresa(deleteModal.id);
-      } else if (deleteModal.type === 'agents') {
+      } else if (activeTab === 'agents') {
         await deleteAgent(deleteModal.id);
-      } else if (deleteModal.type === 'follow-ups') {
+      } else if (activeTab === 'follow-ups') {
         await deleteFollowUp(deleteModal.id);
-      } else if (deleteModal.type === 'leads') {
+      } else if (activeTab === 'leads') {
         await deleteLead(deleteModal.id);
       }
-      setDeleteModal({ isOpen: false, id: 0, type: 'empresas', name: '' });
+      setDeleteModal({ isOpen: false, id: 0, name: '' });
     } catch (err: any) {
       setError(err.message || 'Erro ao inativar');
     } finally {
@@ -522,6 +560,25 @@ export default function App() {
     return loadingLd || loadingAg || loadingEmp;
   };
 
+  // Safe Navigation Handler
+  useEffect(() => {
+    const handleHashChange = () => {
+      const tab = getTabFromHash();
+      setActiveTab(tab);
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  if (!token || !user) {
+    return <LoginScreen onLoginSuccess={(newToken, newUser) => {
+      localStorage.setItem('auth-token', newToken);
+      localStorage.setItem('auth-user', JSON.stringify(newUser));
+      setToken(newToken);
+      setUser(newUser);
+    }} />;
+  }
+
   return (
     <div className="app-container">
       {/* SIDEBAR */}
@@ -529,14 +586,22 @@ export default function App() {
         <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: isMainSidebarCollapsed ? 'center' : 'space-between', width: '100%' }}>
           {!isMainSidebarCollapsed ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Building2 size={24} style={{ color: 'hsl(var(--primary))' }} />
-              <span>DeltaAI Admin</span>
+              {systemLogo ? (
+                <img src={`data:image/png;base64,${systemLogo}`} alt={systemName} style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <img src="/logo.jpg" alt="Delta Logo" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
+              )}
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '170px' }}>{systemName}</span>
             </div>
           ) : (
-            <Building2 size={24} style={{ color: 'hsl(var(--primary))' }} />
+            systemLogo ? (
+              <img src={`data:image/png;base64,${systemLogo}`} alt={systemName} style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              <img src="/logo.jpg" alt="Delta Logo" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
+            )
           )}
           <button
-            onClick={() => setIsMainSidebarCollapsed(!isMainSidebarCollapsed)}
+            onClick={toggleSidebar}
             style={{
               color: 'hsl(var(--muted-foreground))',
               padding: '6px',
@@ -581,12 +646,22 @@ export default function App() {
                 <span>Leads</span>
               </button>
             </li>
-            <li className={`menu-item ${activeTab === 'messages' ? 'active' : ''}`}>
-              <button onClick={() => setActiveTab('messages')} title="Histórico de Chat">
-                <MessageSquare size={20} />
-                <span>Histórico de Chat</span>
-              </button>
-            </li>
+            {isSuperAdmin && (
+              <li className={`menu-item ${activeTab === 'messages' ? 'active' : ''}`}>
+                <button onClick={() => setActiveTab('messages')} title="Histórico de Chat">
+                  <MessageSquare size={20} />
+                  <span>Histórico de Chat</span>
+                </button>
+              </li>
+            )}
+            {isSuperAdmin && (
+              <li className={`menu-item ${activeTab === 'users' ? 'active' : ''}`}>
+                <button onClick={() => setActiveTab('users')} title="Usuários">
+                  <UserCog size={20} />
+                  <span>Usuários</span>
+                </button>
+              </li>
+            )}
           </ul>
         </nav>
       </aside>
@@ -601,18 +676,27 @@ export default function App() {
               {activeTab === 'follow-ups' && 'Configurações de Follow-up'}
               {activeTab === 'leads' && 'Leads'}
               {activeTab === 'messages' && 'Histórico de Chat / Mensagens'}
+              {activeTab === 'users' && 'Gerenciamento de Usuários'}
             </h1>
-            <p>
-              {activeTab === 'empresas' && 'Gerencie as organizações cadastradas e seus logos.'}
-              {activeTab === 'agents' && 'Configure os agentes conversacionais para atendimento.'}
-              {activeTab === 'follow-ups' && 'Defina tempos, mensagens e sequências de follow-up.'}
-              {activeTab === 'leads' && 'Controle os leads capturados e seus estados.'}
-              {activeTab === 'messages' && 'Visualização integrada dos chats armazenados na memória do n8n ou banco local.'}
-            </p>
           </div>
           
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginLeft: 'auto' }}>
-            <LoginMock empresas={empresas} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'hsl(var(--card))', border: '1px solid hsl(var(--card-border))', borderRadius: '24px', padding: '6px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>
+                Olá, <strong style={{ color: 'hsl(var(--primary))' }}>{user?.name}</strong> ({user?.role === 'superadmin' ? '🛡️ Super Admin' : user?.role === 'manager' ? '💼 Gerente' : '🧑‍💻 Funcionário'})
+              </span>
+              <button 
+                className="btn btn-secondary btn-sm" 
+                style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '16px' }}
+                onClick={() => {
+                  localStorage.removeItem('auth-token');
+                  localStorage.removeItem('auth-user');
+                  window.location.reload();
+                }}
+              >
+                Sair
+              </button>
+            </div>
 
             {(activeTab === 'empresas' || activeTab === 'agents') && (
               <button
@@ -629,7 +713,7 @@ export default function App() {
                 {showInactive ? 'Ocultando ativos' : 'Mostrar inativos'}
               </button>
             )}
-            {activeTab !== 'messages' && hasWritePermission && (
+            {activeTab !== 'messages' && activeTab !== 'users' && (activeTab === 'agents' ? isSuperAdmin : hasWritePermission) && (
               <button className="btn btn-primary" onClick={openCreateForm}>
                 <Plus size={16} /> Novo
               </button>
@@ -648,496 +732,169 @@ export default function App() {
           </div>
         )}
 
-        {isLoadingTab() ? (
+        {isLoadingTab() && (activeTab === 'leads' ? leads.length === 0 : true) ? (
           <SkeletonView tab={activeTab} />
         ) : (
           <>
             {activeTab === 'empresas' && isSuperAdmin && (
-              <div className="dashboard-grid">
-                {getFilteredEmpresas().map(emp => (
-                  <div key={emp.id} className="card" style={!emp.active ? { opacity: 0.6 } : {}}>
-                    <div className="card-header">
-                      {emp.logo ? (
-                        <img src={`data:image/png;base64,${emp.logo}`} alt={emp.name} className="company-logo" />
-                      ) : (
-                        <div className="company-logo-placeholder">{emp.name.charAt(0).toUpperCase()}</div>
-                      )}
-                      <span className={`badge ${emp.active ? 'badge-success' : 'badge-danger'}`}>
-                        {emp.active ? 'Ativa' : 'Inativa'}
-                      </span>
-                    </div>
-                    <div className="card-body">
-                      <h3 className="card-title">{emp.name}</h3>
-                      <span style={{ fontSize: '12px', marginTop: '8px' }}>
-                        Criado em: {new Date(emp.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="card-footer">
-                      {emp.active && (
-                        <>
-                          <a href={getBoardUrl(emp.id, emp.name)} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>
-                            🔗 Board
-                          </a>
-                          <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(emp)}>
-                            <Pencil size={12} /> Editar
-                          </button>
-                          <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(emp.id, emp.name)}>
-                            <Trash2 size={12} /> Inativar
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <EmpresasPage
+                empresas={getFilteredEmpresas()}
+                showInactive={showInactive}
+                hasWritePermission={hasWritePermission}
+                createEmpresa={createEmpresa}
+                updateEmpresa={updateEmpresa}
+                deleteEmpresa={deleteEmpresa}
+                openCreateForm={openCreateForm}
+                openEditForm={openEditForm}
+                isFormOpen={isFormOpen}
+                setIsFormOpen={setIsFormOpen}
+                editingId={editingId}
+                empresaName={empresaName}
+                setEmpresaName={setEmpresaName}
+                empresaLogo={empresaLogo}
+                setEmpresaLogo={setEmpresaLogo}
+                handleLogoUpload={handleLogoUpload}
+                actionLoading={actionLoading}
+                handleSave={handleSave}
+                confirmDelete={confirmDelete}
+                deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
+                handleDelete={handleDelete}
+                setDeleteModal={setDeleteModal}
+              />
             )}
 
             {activeTab === 'agents' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {getGroupedAgents().map(empGroup => (
-                  <div key={empGroup.empresaId} style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--card-border))', borderRadius: 'var(--radius)', padding: '24px' }}>
-                    <div className="tree-empresa-header" style={{ borderBottom: '2px solid hsl(var(--card-border))', paddingBottom: '10px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {empGroup.empresaLogo ? (
-                        <img src={`data:image/png;base64,${empGroup.empresaLogo}`} alt={empGroup.empresaName} style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
-                      ) : (
-                        <Building2 size={18} style={{ color: 'hsl(var(--primary))' }} />
-                      )}
-                      <span style={{ fontWeight: 700 }}>{empGroup.empresaName}</span>
-                    </div>
-                    <div className="dashboard-grid">
-                      {empGroup.agents.map(ag => {
-                        const isInactive = ag.status === 0;
-                        return (
-                          <div key={ag.id} className="card" style={isInactive ? { opacity: 0.6 } : {}}>
-                            <div className="card-header">
-                              <span className={`badge ${isInactive ? 'badge-danger' : ag.status === 1 ? 'badge-success' : 'badge-warning'}`}>
-                                {isInactive ? 'Inativo' : ag.status === 1 ? 'Ativo' : 'Pendente'}
-                              </span>
-                            </div>
-                            <div className="card-body">
-                              <h3 className="card-title">{ag.name}</h3>
-                              <p><strong>Telefone:</strong> {ag.phone_number}</p>
-                              <p>
-                                <strong>Instância:</strong> {ag.instance_name}{' '}
-                                {ag.instance_name && !isInactive && (
-                                  <span className={`badge ${ag.evolution_status === 'open' || ag.evolution_status === 'connected' ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '9px', marginLeft: '6px' }}>
-                                    {ag.evolution_status || 'desconectado'}
-                                  </span>
-                                )}
-                              </p>
-                              <p style={{ maxHeight: '80px', overflow: 'hidden' }}>
-                                <strong>Prompt:</strong> {ag.prompt}
-                              </p>
-                            </div>
-                            <div className="card-footer">
-                              {!isInactive && ag.instance_name && ag.evolution_status !== 'open' && ag.evolution_status !== 'connected' && hasWritePermission && (
-                                <button className="btn btn-primary btn-sm" onClick={() => showEvolutionQrCode(ag.instance_name)}>
-                                  ⚡ QR Code
-                                </button>
-                              )}
-                              {hasWritePermission && (
-                                <>
-                                  <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(ag)}>
-                                    <Pencil size={12} /> Editar
-                                  </button>
-                                  {!isInactive && (
-                                    <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(ag.id, ag.name)}>
-                                      <Trash2 size={12} /> Inativar
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <AgentsPage
+                getGroupedAgents={getGroupedAgents}
+                hasWritePermission={hasWritePermission}
+                isSuperAdmin={isSuperAdmin}
+                empresas={empresas}
+                showEvolutionQrCode={showEvolutionQrCode}
+                openEditForm={openEditForm}
+                confirmDelete={confirmDelete}
+                isFormOpen={isFormOpen}
+                setIsFormOpen={setIsFormOpen}
+                editingId={editingId}
+                agentName={agentName}
+                setAgentName={setAgentName}
+                agentEmpresaId={agentEmpresaId}
+                setAgentEmpresaId={setAgentEmpresaId}
+                agentPrompt={agentPrompt}
+                setAgentPrompt={setAgentPrompt}
+                agentPhone={agentPhone}
+                setAgentPhone={setAgentPhone}
+                agentInstance={agentInstance}
+                setAgentInstance={setAgentInstance}
+                agentStatus={agentStatus}
+                setAgentStatus={setAgentStatus}
+                agentUpsertLead={agentUpsertLead}
+                setAgentUpsertLead={setAgentUpsertLead}
+                evolutionInstances={evolutionInstances}
+                actionLoading={actionLoading}
+                handleSave={handleSave}
+                deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
+                handleDelete={handleDelete}
+                setDeleteModal={setDeleteModal}
+                qrModal={qrModal}
+                setQrModal={setQrModal}
+              />
             )}
 
             {activeTab === 'follow-ups' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {getGroupedFollowUps().map(empGroup => (
-                  <div key={empGroup.empresaId} style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--card-border))', borderRadius: 'var(--radius)', padding: '24px' }}>
-                    <div style={{ borderBottom: '2px solid hsl(var(--card-border))', paddingBottom: '10px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <Building2 size={18} style={{ color: 'hsl(var(--primary))' }} />
-                      <span style={{ fontWeight: 700 }}>{empGroup.empresaName}</span>
-                    </div>
-                    {empGroup.agents.map(agGroup => (
-                      <div key={agGroup.agentId} style={{ marginLeft: '12px', marginTop: '16px' }}>
-                        <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 12px 0' }}>
-                          <Users size={16} />
-                          <span>{agGroup.agentName}</span>
-                        </h4>
-                        <div className="dashboard-grid">
-                          {agGroup.followUps.map(fl => (
-                            <div key={fl.id} className="card" style={{ padding: '16px', display: 'flex', flexDirection: 'column' }}>
-                              <div className="card-header" style={{ marginBottom: '12px' }}>
-                                <span className="badge badge-info">Passo {fl.order}</span>
-                                <span className={`badge ${fl.active ? 'badge-success' : 'badge-danger'}`}>{fl.active ? 'Ativo' : 'Inativo'}</span>
-                              </div>
-                              <div className="card-body" style={{ flex: 1, padding: 0 }}>
-                                <p><strong>Tempo:</strong> {fl.time} min</p>
-                                <blockquote style={{ borderLeft: '3px solid hsl(var(--primary))', paddingLeft: '10px', fontStyle: 'italic' }}>
-                                  "{fl.message}"
-                                </blockquote>
-                              </div>
-                              {hasWritePermission && (
-                                <div className="card-footer" style={{ marginTop: '16px', paddingBottom: 0 }}>
-                                  <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(fl)}>
-                                    <Pencil size={12} /> Editar
-                                  </button>
-                                  <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(fl.id, `Follow-up ${fl.order}`)}>
-                                    <Trash2 size={12} /> Inativar
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
+              <FollowUpsPage
+                getGroupedFollowUps={getGroupedFollowUps}
+                getFilteredAgents={getFilteredAgents}
+                hasWritePermission={hasWritePermission}
+                openEditForm={openEditForm}
+                confirmDelete={confirmDelete}
+                isFormOpen={isFormOpen}
+                setIsFormOpen={setIsFormOpen}
+                editingId={editingId}
+                followOrder={followOrder}
+                setFollowOrder={setFollowOrder}
+                followAgentId={followAgentId}
+                setFollowAgentId={setFollowAgentId}
+                followMessage={followMessage}
+                setFollowMessage={setFollowMessage}
+                followTime={followTime}
+                setFollowTime={setFollowTime}
+                followActive={followActive}
+                setFollowActive={setFollowActive}
+                actionLoading={actionLoading}
+                handleSave={handleSave}
+                deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
+                handleDelete={handleDelete}
+                setDeleteModal={setDeleteModal}
+              />
             )}
 
             {activeTab === 'leads' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ display: 'flex', gap: '16px', backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--card-border))', padding: '16px', borderRadius: 'var(--radius)' }}>
-                  {isSuperAdmin && (
-                    <div className="form-group" style={{ margin: 0, minWidth: '200px' }}>
-                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 600 }}>Empresa</label>
-                      <select className="form-control" value={filterEmpresaId} onChange={e => setFilterEmpresaId(e.target.value)}>
-                        <option value="">Todas</option>
-                        {empresas.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  <div className="form-group" style={{ margin: 0, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', fontWeight: 600 }}>Agente</label>
-                    <select className="form-control" value={filterAgentId} onChange={e => setFilterAgentId(e.target.value)}>
-                      <option value="">Todos</option>
-                      {getFilteredAgents().filter(ag => filterEmpresaId === '' || ag.empresa_id === Number(filterEmpresaId)).map(ag => (
-                        <option key={ag.id} value={ag.id}>{ag.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="table-container">
-                  <table className="custom-table">
-                    <thead>
-                      <tr>
-                        <th>Nome</th>
-                        <th>JID</th>
-                        <th>Agente</th>
-                        <th>Status</th>
-                        <th>Valor</th>
-                        <th>Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {getFilteredLeads().filter(ld => {
-                        if (filterEmpresaId !== '') {
-                          const ag = agents.find(a => a.id === ld.agent_id);
-                          if (!ag || ag.empresa_id !== Number(filterEmpresaId)) return false;
-                        }
-                        if (filterAgentId !== '' && ld.agent_id !== Number(filterAgentId)) return false;
-                        return true;
-                      }).map(ld => (
-                        <tr key={ld.id}>
-                          <td>{ld.name || 'Sem nome'}</td>
-                          <td>{ld.remote_jid_alt}</td>
-                          <td>{ld.agent_name || 'Sem agente'}</td>
-                          <td><Badge status={ld.status} /></td>
-                          <td>{ld.value ? `R$ ${ld.value}` : '-'}</td>
-                          <td>
-                            <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedLeadId(ld.id); setActiveTab('messages'); }}>
-                              💬 Chat
-                            </button>
-                            {hasWritePermission && (
-                              <>
-                                <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(ld)}>
-                                  Editar
-                                </button>
-                                <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(ld.id, ld.name || ld.remote_jid_alt)}>
-                                  Excluir
-                                </button>
-                              </>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <LeadsPage
+                updateLead={updateLead}
+                getFilteredLeads={getFilteredLeads}
+                getFilteredAgents={getFilteredAgents}
+                isSuperAdmin={isSuperAdmin}
+                empresas={empresas}
+                agents={agents}
+                filterEmpresaId={filterEmpresaId}
+                setFilterEmpresaId={setFilterEmpresaId}
+                filterAgentId={filterAgentId}
+                setFilterAgentId={setFilterAgentId}
+                hasWritePermission={hasWritePermission}
+                openEditForm={openEditForm}
+                confirmDelete={confirmDelete}
+                setSelectedLeadId={setSelectedLeadId}
+                setActiveTab={setActiveTab}
+                isFormOpen={isFormOpen}
+                setIsFormOpen={setIsFormOpen}
+                editingId={editingId}
+                leadName={leadName}
+                setLeadName={setLeadName}
+                leadAgentId={leadAgentId}
+                setLeadAgentId={setLeadAgentId}
+                leadRemoteJid={leadRemoteJid}
+                setLeadRemoteJid={setLeadRemoteJid}
+                leadStatus={leadStatus}
+                setLeadStatus={setLeadStatus}
+                leadValue={leadValue}
+                setLeadValue={setLeadValue}
+                actionLoading={actionLoading}
+                handleSave={handleSave}
+                deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
+                handleDelete={handleDelete}
+                setDeleteModal={setDeleteModal}
+                refetchLeads={refetchLeads}
+                systemLogo={systemLogo}
+                userName={user?.name}
+              />
             )}
 
             {activeTab === 'messages' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '32px', height: 'calc(100vh - 200px)' }}>
-                <div style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--card-border))', borderRadius: 'var(--radius)', padding: '20px', overflowY: 'auto' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', border: '1px solid hsl(var(--card-border))' }}>
-                    <Search size={16} style={{ color: 'hsl(var(--muted-foreground))' }} />
-                    <input type="text" placeholder="Buscar lead..." value={chatSearchQuery} onChange={e => setChatSearchQuery(e.target.value)} style={{ background: 'transparent', border: 'none', color: 'hsl(var(--foreground))', outline: 'none', width: '100%', fontSize: '13px' }} />
-                  </div>
-                  {getGroupedLeads().map(empGroup => (
-                    <div key={empGroup.empresaId} style={{ marginBottom: '20px' }}>
-                      <h4 style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))', textTransform: 'uppercase', marginBottom: '8px' }}>{empGroup.empresaName}</h4>
-                      {empGroup.agents.map(agGroup => (
-                        <div key={agGroup.agentId} style={{ marginLeft: '8px' }}>
-                          <h5 style={{ fontSize: '11px', color: 'hsl(var(--primary))', margin: '4px 0' }}>{agGroup.agentName}</h5>
-                          {agGroup.leads.map(ld => (
-                            <button
-                              key={ld.id}
-                              onClick={() => setSelectedLeadId(ld.id)}
-                              style={{
-                                width: '100%', textAlign: 'left', padding: '10px', borderRadius: '8px', border: 'none',
-                                background: selectedLeadId === ld.id ? 'rgba(99,102,241,0.1)' : 'transparent',
-                                color: selectedLeadId === ld.id ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
-                                cursor: 'pointer', fontSize: '13px', display: 'block', margin: '2px 0'
-                              }}
-                            >
-                              {ld.name || ld.remote_jid_alt}
-                            </button>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
+              <MessagesPage
+                chatSearchQuery={chatSearchQuery}
+                setChatSearchQuery={setChatSearchQuery}
+                getGroupedLeads={getGroupedLeads}
+                selectedLeadId={selectedLeadId}
+                setSelectedLeadId={setSelectedLeadId}
+                liveMonitoring={liveMonitoring}
+                setLiveMonitoring={setLiveMonitoring}
+                chatHistory={chatHistory}
+                loadingHistory={loadingHistory}
+                historySource={historySource}
+                historyTable={historyTable}
+                chatContainerRef={chatContainerRef}
+                selectedLeadName={getFilteredLeads().find(l => l.id === selectedLeadId)?.name || 'Conversa'}
+                userName={user?.name}
+                systemLogo={systemLogo}
+              />
+            )}
 
-                <div className="chat-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                  {selectedLeadId ? (
-                    <>
-                      <div className="chat-header" style={{ padding: '16px', borderBottom: '1px solid hsl(var(--card-border))', display: 'flex', justifyContent: 'space-between' }}>
-                        <div>
-                          <h3>{getFilteredLeads().find(l => l.id === selectedLeadId)?.name || 'Conversa'}</h3>
-                          <span style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}>Fonte: {historySource} ({historyTable})</span>
-                        </div>
-                        <button className={`btn btn-sm ${liveMonitoring ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setLiveMonitoring(!liveMonitoring)}>
-                          {liveMonitoring ? '🟢 Monitorando' : 'Monitorar'}
-                        </button>
-                      </div>
-
-                      <div className="chat-messages" ref={chatContainerRef} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {loadingHistory ? (
-                          <div style={{ textAlign: 'center', padding: '20px' }}>Carregando histórico...</div>
-                        ) : (
-                          chatHistory.map(msg => {
-                            const isAi = (msg.role || '').toLowerCase() === 'assistant' || (msg.role || '').toLowerCase() === 'bot' || (msg.role || '').toLowerCase() === 'ai' || (msg.source || '').toLowerCase() === 'bot' || (msg.source || '').toLowerCase() === 'ai';
-                            return (
-                              <div
-                                key={msg.id}
-                                style={{
-                                  alignSelf: isAi ? 'flex-start' : 'flex-end',
-                                  background: isAi ? 'hsl(var(--card))' : 'rgba(99,102,241,0.1)',
-                                  border: '1px solid ' + (isAi ? 'hsl(var(--card-border))' : 'rgba(99,102,241,0.2)'),
-                                  padding: '12px 16px', borderRadius: '12px', maxWidth: '70%'
-                                }}
-                              >
-                                {msg.quoted_message_text && (
-                                  <div style={{ borderLeft: '3px solid #ccc', paddingLeft: '8px', fontSize: '11px', opacity: 0.6, marginBottom: '6px' }}>
-                                    {msg.quoted_message_text}
-                                  </div>
-                                )}
-                                {msg.messageType && msg.messageType !== 'conversation' && msg.messageType !== 'extendedTextMessage' ? (
-                                  <MediaMessageRenderer messageId={msg.id} messageType={msg.messageType} content={msg.content} />
-                                ) : (
-                                  <div style={{ fontSize: '14px', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-                                )}
-                                <div style={{ fontSize: '10px', textAlign: 'right', opacity: 0.5, marginTop: '4px' }}>
-                                  {new Date(msg.createdAt).toLocaleTimeString()}
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'hsl(var(--muted-foreground))' }}>
-                      Selecione um lead para ver o histórico do chat.
-                    </div>
-                  )}
-                </div>
-              </div>
+            {activeTab === 'users' && isSuperAdmin && (
+              <UsersPage empresas={empresas} />
             )}
           </>
         )}
       </main>
-
-      {/* FORM DIALOG / MODAL */}
-      {isFormOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px', width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid hsl(var(--card-border))', paddingBottom: '12px', marginBottom: '20px' }}>
-              <h2>{editingId ? 'Editar' : 'Novo'} Registro</h2>
-              <button onClick={() => setIsFormOpen(false)} style={{ background: 'transparent', border: 'none', color: 'hsl(var(--foreground))', cursor: 'pointer' }}><X size={20} /></button>
-            </div>
-
-            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {activeTab === 'empresas' && (
-                <>
-                  <div className="form-group">
-                    <label>Nome da Empresa</label>
-                    <input type="text" className="form-control" value={empresaName} onChange={e => setEmpresaName(e.target.value)} required />
-                  </div>
-                  <div className="form-group">
-                    <label>Logo (Imagem)</label>
-                    <input type="file" accept="image/*" onChange={handleLogoUpload} />
-                  </div>
-                </>
-              )}
-
-              {activeTab === 'agents' && (
-                <>
-                  <div className="form-group">
-                    <label>Nome do Agente</label>
-                    <input type="text" className="form-control" value={agentName} onChange={e => setAgentName(e.target.value)} required />
-                  </div>
-                  {isSuperAdmin && (
-                    <div className="form-group">
-                      <label>Empresa</label>
-                      <select className="form-control" value={agentEmpresaId} onChange={e => setAgentEmpresaId(Number(e.target.value))}>
-                        {empresas.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  <div className="form-group">
-                    <label>Prompt</label>
-                    <textarea className="form-control" rows={4} value={agentPrompt} onChange={e => setAgentPrompt(e.target.value)} required />
-                  </div>
-                  <div className="form-group">
-                    <label>Telefone</label>
-                    <input type="text" className="form-control" value={agentPhone} onChange={e => setAgentPhone(e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label>Instância da Evolution API</label>
-                    <select className="form-control" value={agentInstance} onChange={e => setAgentInstance(e.target.value)}>
-                      <option value="">Selecione...</option>
-                      {evolutionInstances.map(inst => (
-                        <option key={inst.instanceName || inst.name} value={inst.instanceName || inst.name}>
-                          {inst.instanceName || inst.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Status</label>
-                    <select className="form-control" value={agentStatus} onChange={e => setAgentStatus(Number(e.target.value))}>
-                      <option value={1}>Ativo</option>
-                      <option value={2}>Pendente</option>
-                    </select>
-                  </div>
-                  <div className="form-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input type="checkbox" checked={agentUpsertLead} onChange={e => setAgentUpsertLead(e.target.checked)} />
-                    <label style={{ margin: 0 }}>Upsert Lead</label>
-                  </div>
-                </>
-              )}
-
-              {activeTab === 'follow-ups' && (
-                <>
-                  <div className="form-group">
-                    <label>Ordem / Passo</label>
-                    <input type="number" className="form-control" value={followOrder} onChange={e => setFollowOrder(Number(e.target.value))} required />
-                  </div>
-                  <div className="form-group">
-                    <label>Agente</label>
-                    <select className="form-control" value={followAgentId} onChange={e => setFollowAgentId(Number(e.target.value))}>
-                      {getFilteredAgents().map(ag => <option key={ag.id} value={ag.id}>{ag.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Mensagem</label>
-                    <textarea className="form-control" rows={3} value={followMessage} onChange={e => setFollowMessage(e.target.value)} required />
-                  </div>
-                  <div className="form-group">
-                    <label>Tempo de Espera (minutos)</label>
-                    <input type="number" className="form-control" value={followTime} onChange={e => setFollowTime(Number(e.target.value))} required />
-                  </div>
-                  <div className="form-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input type="checkbox" checked={followActive} onChange={e => setFollowActive(e.target.checked)} />
-                    <label style={{ margin: 0 }}>Ativo</label>
-                  </div>
-                </>
-              )}
-
-              {activeTab === 'leads' && (
-                <>
-                  <div className="form-group">
-                    <label>Nome do Lead</label>
-                    <input type="text" className="form-control" value={leadName} onChange={e => setLeadName(e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label>Agente Vinculado</label>
-                    <select className="form-control" value={leadAgentId} onChange={e => setLeadAgentId(Number(e.target.value))}>
-                      {getFilteredAgents().map(ag => <option key={ag.id} value={ag.id}>{ag.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Remote JID / Telefone</label>
-                    <input type="text" className="form-control" value={leadRemoteJid} onChange={e => setLeadRemoteJid(e.target.value)} required />
-                  </div>
-                  <div className="form-group">
-                    <label>Status</label>
-                    <select className="form-control" value={leadStatus} onChange={e => setLeadStatus(e.target.value)}>
-                      <option value="NOVO">NOVO</option>
-                      <option value="HUMANO">HUMANO</option>
-                      <option value="CONCLUIDO">CONCLUIDO</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Valor estimado</label>
-                    <input type="text" className="form-control" value={leadValue} onChange={e => setLeadValue(e.target.value)} />
-                  </div>
-                </>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid hsl(var(--card-border))', paddingTop: '16px', marginTop: '10px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}>Salvar</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRM DELETION MODAL */}
-      <ConfirmationModal
-        isOpen={deleteModal.isOpen}
-        title="Inativar Registro"
-        description={`Tem certeza que deseja inativar "${deleteModal.name}"?`}
-        onConfirm={handleDelete}
-        onClose={() => setDeleteModal({ isOpen: false, id: 0, type: 'empresas', name: '' })}
-        disabled={actionLoading}
-      />
-
-      {/* EVOLUTION QR CODE MODAL */}
-      {qrModal.isOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid hsl(var(--card-border))', paddingBottom: '12px', marginBottom: '20px' }}>
-              <h2>Conectar WhatsApp</h2>
-              <button onClick={() => setQrModal(prev => ({ ...prev, isOpen: false }))} style={{ background: 'transparent', border: 'none', color: 'hsl(var(--foreground))', cursor: 'pointer' }}><X size={20} /></button>
-            </div>
-            {qrModal.loading ? (
-              <div style={{ padding: '40px' }}>Gerando QR Code...</div>
-            ) : qrModal.error ? (
-              <div style={{ color: 'red', padding: '20px' }}>{qrModal.error}</div>
-            ) : qrModal.qrCode ? (
-              <div>
-                <img src={qrModal.qrCode} alt="WhatsApp QR Code" style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid hsl(var(--card-border))' }} />
-                <p style={{ marginTop: '16px', fontSize: '13px', color: 'hsl(var(--muted-foreground))' }}>Escaneie este QR Code no seu WhatsApp (Aparelhos conectados) para ativar a instância <strong>{qrModal.instanceName}</strong>.</p>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

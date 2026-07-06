@@ -1,8 +1,10 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
+import crypto from 'crypto';
 
 export interface UserSession {
   role: 'superadmin' | 'manager' | 'employee';
   companyId?: number;
+  userId?: number;
 }
 
 declare module 'fastify' {
@@ -12,24 +14,52 @@ declare module 'fastify' {
 }
 
 export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
-  const roleHeader = request.headers['x-user-role'] as string;
-  const companyIdHeader = request.headers['x-user-company-id'] as string;
-
-  // Default fallback if headers are not set (e.g. legacy or during transition)
-  let role: 'superadmin' | 'manager' | 'employee' = 'superadmin';
-  let companyId: number | undefined = undefined;
-
-  if (roleHeader === 'manager' || roleHeader === 'employee') {
-    role = roleHeader;
-    if (companyIdHeader) {
-      companyId = parseInt(companyIdHeader, 10);
-    }
-  } else if (roleHeader === 'superadmin') {
-    role = 'superadmin';
+  // Allow bypassing auth for login route
+  const isLoginRoute = request.routerPath === '/api/auth/login' || request.url === '/api/auth/login' || request.url.includes('/api/auth/login');
+  if (isLoginRoute) {
+    return;
   }
 
-  request.user = {
-    role,
-    companyId: isNaN(companyId as number) ? undefined : companyId,
-  };
+  const authHeader = request.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    reply.status(401).send({ error: 'Unauthorized: Missing or invalid token format' });
+    throw new Error('Unauthorized');
+  }
+
+  const token = authHeader.substring(7);
+  const passKey = process.env.PASS_KEY;
+  if (!passKey) {
+    reply.status(500).send({ error: 'Server error: PASS_KEY is not defined' });
+    throw new Error('PASS_KEY undefined');
+  }
+
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    reply.status(401).send({ error: 'Unauthorized: Invalid token structure' });
+    throw new Error('Unauthorized');
+  }
+
+  const [header, data, signature] = parts;
+  const expectedSig = crypto.createHmac('sha256', passKey).update(`${header}.${data}`).digest('base64url');
+  if (signature !== expectedSig) {
+    reply.status(401).send({ error: 'Unauthorized: Invalid token signature' });
+    throw new Error('Unauthorized');
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
+    if (payload.exp && Date.now() > payload.exp) {
+      reply.status(401).send({ error: 'Unauthorized: Token expired' });
+      throw new Error('Unauthorized');
+    }
+
+    request.user = {
+      role: payload.role,
+      companyId: payload.companyId ? Number(payload.companyId) : undefined,
+      userId: payload.userId ? Number(payload.userId) : undefined
+    };
+  } catch (err) {
+    reply.status(401).send({ error: 'Unauthorized: Invalid token payload' });
+    throw new Error('Unauthorized');
+  }
 }

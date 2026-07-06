@@ -4,6 +4,7 @@ import { Empresa } from '../../../domain/entities/Empresa';
 import { Agent } from '../../../domain/entities/Agent';
 import { Lead } from '../../../domain/entities/Lead';
 import { FollowUpSetting, ChatMessage } from '../../../domain/entities/FollowUp';
+import { User } from '../../../domain/entities/User';
 
 export class PostgresAdapter implements DBPort {
   async getEmpresas(companyId?: number): Promise<Empresa[]> {
@@ -199,21 +200,60 @@ export class PostgresAdapter implements DBPort {
     return res.rows.length > 0;
   }
 
-  async getLeads(companyId?: number): Promise<Lead[]> {
+  async getLeads(companyId?: number, agentId?: number): Promise<Lead[]> {
+    const params: any[] = [];
+    let paramCount = 1;
+
+    // When filtering by company use the optimized empresa → agents → lead join
+    if (companyId !== undefined) {
+      params.push(companyId); // $1 = empresa_id
+
+      let query = `
+        SELECT DISTINCT
+          l.*,
+          a.translations,
+          a.name   AS agent_name,
+          a.status AS agent_status,
+          f.message AS follow_up_message
+        FROM public.empresa e
+        INNER JOIN public.agents a ON a.empresa_id = $${paramCount}
+        INNER JOIN public.lead l   ON l.agent_id = a.id
+        LEFT  JOIN public.follow_up_settings f ON l.follow_up_id = f.id
+        WHERE e.id = $${paramCount}
+          AND l.status NOT IN ('CANCELADO')
+      `;
+
+      if (agentId !== undefined) {
+        paramCount++;
+        query += ` AND l.agent_id = $${paramCount}`;
+        params.push(agentId);
+      }
+
+      query += ' ORDER BY l.id DESC';
+      const res = await pool.query(query, params);
+      return res.rows;
+    }
+
+    // Superadmin without company filter — plain join, optional agentId
     let query = `
-      SELECT l.*, a.name as agent_name, a.status as agent_status, f.message as follow_up_message
+      SELECT DISTINCT
+        l.*,
+        a.translations,
+        a.name   AS agent_name,
+        a.status AS agent_status,
+        f.message AS follow_up_message
       FROM public.lead l
       LEFT JOIN public.agents a ON l.agent_id = a.id
       LEFT JOIN public.follow_up_settings f ON l.follow_up_id = f.id
-      WHERE l.status != 'CANCELADO'
+      WHERE l.status NOT IN ('CANCELADO')
     `;
-    const params: any[] = [];
-    if (companyId !== undefined) {
-      query += ' AND a.empresa_id = $1';
-      params.push(companyId);
-    }
-    query += ' ORDER BY l.id DESC';
 
+    if (agentId !== undefined) {
+      query += ` AND l.agent_id = $${paramCount++}`;
+      params.push(agentId);
+    }
+
+    query += ' ORDER BY l.id DESC';
     const res = await pool.query(query, params);
     return res.rows;
   }
@@ -286,10 +326,17 @@ export class PostgresAdapter implements DBPort {
     return checkTableExists(tableName);
   }
 
-  async getDynamicTableMessages(tableName: string): Promise<any[]> {
+  async getDynamicTableMessages(tableName: string, sessionId?: string): Promise<any[]> {
     // Sanitized dynamic tables
-    const query = `SELECT * FROM public."${tableName}" ORDER BY id ASC`;
-    const res = await pool.query(query);
+    const sanitizedTableName = tableName.replace(/[^a-zA-Z0-9_]/g, '');
+    let query = `SELECT * FROM public."${sanitizedTableName}"`;
+    const params: any[] = [];
+    if (sessionId) {
+      query += ` WHERE session_id = $1`;
+      params.push(sessionId);
+    }
+    query += ` ORDER BY id ASC`;
+    const res = await pool.query(query, params);
     return res.rows;
   }
 
@@ -313,11 +360,15 @@ export class PostgresAdapter implements DBPort {
   }
 
   async getLeadStandardMessages(sessionId: string): Promise<ChatMessage[]> {
+    // Normalise: strip @s.whatsapp.net suffix for looser matching
+    const bare = sessionId.replace(/@[^@]+$/, '');
+
     const res = await pool.query(
-      `SELECT * FROM public.messages 
+      `SELECT * FROM public.messages
        WHERE session_id = $1::text
+          OR session_id = $2::text
        ORDER BY created_at ASC`,
-      [sessionId]
+      [sessionId, bare]
     );
     return res.rows.map(row => ({
       id: row.id,
@@ -336,5 +387,103 @@ export class PostgresAdapter implements DBPort {
   async getMessageById(id: number): Promise<any> {
     const msgRes = await pool.query('SELECT * FROM public.messages WHERE id = $1', [id]);
     return msgRes.rows[0] || null;
+  }
+
+  async createMessage(message: {
+    agent_id: number;
+    session_id: string;
+    content: string;
+    role: string;
+    source: string;
+    remote_jid: string;
+    message_type: string;
+    message_id: string;
+    quote_message_content?: string;
+  }): Promise<any> {
+    const res = await pool.query(
+      `INSERT INTO public.messages 
+      (agent_id, session_id, content, role, source, remote_jid, message_type, message_id, quote_message_content, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) RETURNING *`,
+      [
+        message.agent_id,
+        message.session_id,
+        message.content,
+        message.role,
+        message.source,
+        message.remote_jid,
+        message.message_type,
+        message.message_id,
+        message.quote_message_content || null
+      ]
+    );
+    const row = res.rows[0];
+    return {
+      id: row.id,
+      sessionId: row.session_id,
+      content: row.content,
+      role: row.role,
+      source: row.source,
+      createdAt: row.created_at,
+      remoteJid: row.remote_jid,
+      quoted_message_text: row.quote_message_content,
+      messageType: row.message_type,
+      messageId: row.message_id,
+    };
+  }
+
+  async getUsers(companyId?: number): Promise<User[]> {
+    let query = 'SELECT * FROM public.users WHERE active = true';
+    const params: any[] = [];
+    if (companyId !== undefined) {
+      query += ' AND empresa_id = $1';
+      params.push(companyId);
+    }
+    query += ' ORDER BY id DESC';
+    const res = await pool.query(query, params);
+    return res.rows;
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    const res = await pool.query('SELECT * FROM public.users WHERE email = $1 AND active = true', [email]);
+    return res.rows[0] || null;
+  }
+
+  async createUser(user: Omit<User, 'id'>): Promise<User> {
+    const res = await pool.query(
+      `INSERT INTO public.users (name, email, password, role, empresa_id, active, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW()) RETURNING *`,
+      [user.name, user.email, user.password, user.role, user.empresa_id || null]
+    );
+    return res.rows[0];
+  }
+
+  async updateUser(id: number, user: Partial<User>): Promise<User> {
+    const currentRes = await pool.query('SELECT * FROM public.users WHERE id = $1', [id]);
+    if (currentRes.rows.length === 0) throw new Error('User not found');
+    const current = currentRes.rows[0];
+
+    const res = await pool.query(
+      `UPDATE public.users SET 
+        name = $1, email = $2, password = $3, role = $4, empresa_id = $5, active = $6, updated_at = NOW() 
+       WHERE id = $7 RETURNING *`,
+      [
+        user.name ?? current.name,
+        user.email ?? current.email,
+        user.password ?? current.password,
+        user.role ?? current.role,
+        user.empresa_id !== undefined ? user.empresa_id : current.empresa_id,
+        user.active ?? current.active,
+        id
+      ]
+    );
+    return res.rows[0];
+  }
+
+  async deleteUser(id: number): Promise<boolean> {
+    const res = await pool.query(
+      'UPDATE public.users SET active = false, updated_at = NOW() WHERE id = $1 RETURNING *',
+      [id]
+    );
+    return res.rows.length > 0;
   }
 }

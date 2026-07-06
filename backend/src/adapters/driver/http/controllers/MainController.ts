@@ -1,15 +1,29 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { Usecases } from '../../../../ports/driver/Usecases';
+import { EmpresaUsecases } from '../../../../ports/driver/EmpresaUsecases';
+import { AgentUsecases } from '../../../../ports/driver/AgentUsecases';
+import { FollowUpUsecases } from '../../../../ports/driver/FollowUpUsecases';
+import { LeadUsecases } from '../../../../ports/driver/LeadUsecases';
+import { ChatUsecases } from '../../../../ports/driver/ChatUsecases';
+import { EvolutionUsecases } from '../../../../ports/driver/EvolutionUsecases';
+import { UserUsecases } from '../../../../ports/driver/UserUsecases';
 
 export class MainController {
-  constructor(private usecases: Usecases) {}
+  constructor(
+    private empresaUsecases: EmpresaUsecases,
+    private agentUsecases: AgentUsecases,
+    private followUpUsecases: FollowUpUsecases,
+    private leadUsecases: LeadUsecases,
+    private chatUsecases: ChatUsecases,
+    private evolutionUsecases: EvolutionUsecases,
+    private userUsecases: UserUsecases
+  ) {}
 
   // ---------------------------------------------------------------------------
   // EMPRESAS
   // ---------------------------------------------------------------------------
   async getEmpresas(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const data = await this.usecases.getEmpresas(request.user!);
+      const data = await this.empresaUsecases.getEmpresas(request.user!);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch empresas.' });
@@ -19,7 +33,7 @@ export class MainController {
   async createEmpresa(request: FastifyRequest<{ Body: { name: string; logo: string | null } }>, reply: FastifyReply) {
     const { name, logo } = request.body;
     try {
-      const data = await this.usecases.createEmpresa(request.user!, name, logo);
+      const data = await this.empresaUsecases.createEmpresa(request.user!, name, logo);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to create empresa.' });
@@ -30,7 +44,7 @@ export class MainController {
     const id = parseInt(request.params.id, 10);
     const { name, logo } = request.body;
     try {
-      const data = await this.usecases.updateEmpresa(request.user!, id, name, logo);
+      const data = await this.empresaUsecases.updateEmpresa(request.user!, id, name, logo);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to update empresa.' });
@@ -40,7 +54,7 @@ export class MainController {
   async deleteEmpresa(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const id = parseInt(request.params.id, 10);
     try {
-      await this.usecases.deleteEmpresa(request.user!, id);
+      await this.empresaUsecases.deleteEmpresa(request.user!, id);
       return { message: 'Empresa inactivated successfully' };
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to delete empresa.' });
@@ -52,7 +66,7 @@ export class MainController {
   // ---------------------------------------------------------------------------
   async getAgents(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const data = await this.usecases.getAgents(request.user!);
+      const data = await this.agentUsecases.getAgents(request.user!);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch agents.' });
@@ -61,7 +75,7 @@ export class MainController {
 
   async createAgent(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
     try {
-      const data = await this.usecases.createAgent(request.user!, request.body as any);
+      const data = await this.agentUsecases.createAgent(request.user!, request.body as any);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to create agent.' });
@@ -71,7 +85,7 @@ export class MainController {
   async updateAgent(request: FastifyRequest<{ Params: { id: string }; Body: any }>, reply: FastifyReply) {
     const id = parseInt(request.params.id, 10);
     try {
-      const data = await this.usecases.updateAgent(request.user!, id, request.body as any);
+      const data = await this.agentUsecases.updateAgent(request.user!, id, request.body as any);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to update agent.' });
@@ -81,7 +95,7 @@ export class MainController {
   async deleteAgent(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const id = parseInt(request.params.id, 10);
     try {
-      await this.usecases.deleteAgent(request.user!, id);
+      await this.agentUsecases.deleteAgent(request.user!, id);
       return { message: 'Agent inactivated successfully' };
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to delete agent.' });
@@ -93,7 +107,7 @@ export class MainController {
   // ---------------------------------------------------------------------------
   async getFollowUpSettings(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const data = await this.usecases.getFollowUpSettings(request.user!);
+      const data = await this.followUpUsecases.getFollowUpSettings(request.user!);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch settings.' });
@@ -102,7 +116,7 @@ export class MainController {
 
   async createFollowUpSetting(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
     try {
-      const data = await this.usecases.createFollowUpSetting(request.user!, request.body as any);
+      const data = await this.followUpUsecases.createFollowUpSetting(request.user!, request.body as any);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to create setting.' });
@@ -112,7 +126,7 @@ export class MainController {
   async updateFollowUpSetting(request: FastifyRequest<{ Params: { id: string }; Body: any }>, reply: FastifyReply) {
     const id = parseInt(request.params.id, 10);
     try {
-      const data = await this.usecases.updateFollowUpSetting(request.user!, id, request.body as any);
+      const data = await this.followUpUsecases.updateFollowUpSetting(request.user!, id, request.body as any);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to update setting.' });
@@ -122,7 +136,7 @@ export class MainController {
   async deleteFollowUpSetting(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const id = parseInt(request.params.id, 10);
     try {
-      await this.usecases.deleteFollowUpSetting(request.user!, id);
+      await this.followUpUsecases.deleteFollowUpSetting(request.user!, id);
       return { message: 'Follow-up setting inactivated successfully' };
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to delete setting.' });
@@ -134,7 +148,11 @@ export class MainController {
   // ---------------------------------------------------------------------------
   async getLeads(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const data = await this.usecases.getLeads(request.user!);
+      const { empresa, agente } = request.query as any;
+      const data = await this.leadUsecases.getLeads(request.user!, {
+        empresaId: empresa ? Number(empresa) : undefined,
+        agentId: agente ? Number(agente) : undefined
+      });
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch leads.' });
@@ -143,7 +161,7 @@ export class MainController {
 
   async createLead(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
     try {
-      const data = await this.usecases.createLead(request.user!, request.body as any);
+      const data = await this.leadUsecases.createLead(request.user!, request.body as any);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to create lead.' });
@@ -153,7 +171,7 @@ export class MainController {
   async updateLead(request: FastifyRequest<{ Params: { id: string }; Body: any }>, reply: FastifyReply) {
     const id = parseInt(request.params.id, 10);
     try {
-      const data = await this.usecases.updateLead(request.user!, id, request.body as any);
+      const data = await this.leadUsecases.updateLead(request.user!, id, request.body as any);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to update lead.' });
@@ -163,7 +181,7 @@ export class MainController {
   async deleteLead(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const id = parseInt(request.params.id, 10);
     try {
-      await this.usecases.deleteLead(request.user!, id);
+      await this.leadUsecases.deleteLead(request.user!, id);
       return { message: 'Lead cancelled successfully' };
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to delete lead.' });
@@ -176,7 +194,7 @@ export class MainController {
   async getAgentHistory(request: FastifyRequest<{ Params: { agentId: string } }>, reply: FastifyReply) {
     const agentId = parseInt(request.params.agentId, 10);
     try {
-      const data = await this.usecases.getAgentHistory(request.user!, agentId);
+      const data = await this.chatUsecases.getAgentHistory(request.user!, agentId);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to retrieve agent history.' });
@@ -186,20 +204,41 @@ export class MainController {
   async getLeadHistory(request: FastifyRequest<{ Params: { leadId: string } }>, reply: FastifyReply) {
     const leadId = parseInt(request.params.leadId, 10);
     try {
-      const data = await this.usecases.getLeadHistory(request.user!, leadId);
+      const data = await this.chatUsecases.getLeadHistory(request.user!, leadId);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to retrieve lead history.' });
     }
   }
 
+  async getLeadAgentHistory(request: FastifyRequest<{ Params: { leadId: string } }>, reply: FastifyReply) {
+    const leadId = parseInt(request.params.leadId, 10);
+    try {
+      const data = await this.chatUsecases.getLeadAgentHistory(request.user!, leadId);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to retrieve lead agent history.' });
+    }
+  }
+
   async getMessageMedia(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const messageId = parseInt(request.params.id, 10);
     try {
-      const data = await this.usecases.getMessageMedia(request.user!, messageId);
+      const data = await this.chatUsecases.getMessageMedia(request.user!, messageId);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch message media.' });
+    }
+  }
+
+  async sendMessage(request: FastifyRequest<{ Params: { leadId: string }; Body: { message: string; messageType?: string; mediaBase64?: string; fileName?: string; quotedMessageId?: number } }>, reply: FastifyReply) {
+    const leadId = parseInt(request.params.leadId, 10);
+    const { message, messageType, mediaBase64, fileName, quotedMessageId } = request.body;
+    try {
+      const data = await this.chatUsecases.sendMessage(request.user!, leadId, message, { messageType, mediaBase64, fileName, quotedMessageId });
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to send message.' });
     }
   }
 
@@ -208,7 +247,7 @@ export class MainController {
   // ---------------------------------------------------------------------------
   async getEvolutionInstances(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const data = await this.usecases.getEvolutionInstances(request.user!);
+      const data = await this.evolutionUsecases.getEvolutionInstances(request.user!);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch evolution instances.' });
@@ -217,7 +256,7 @@ export class MainController {
 
   async getEvolutionConnectionState(request: FastifyRequest<{ Params: { instanceName: string } }>, reply: FastifyReply) {
     try {
-      const data = await this.usecases.getEvolutionConnectionState(request.user!, request.params.instanceName);
+      const data = await this.evolutionUsecases.getEvolutionConnectionState(request.user!, request.params.instanceName);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch connection state.' });
@@ -226,10 +265,70 @@ export class MainController {
 
   async connectEvolution(request: FastifyRequest<{ Params: { instanceName: string } }>, reply: FastifyReply) {
     try {
-      const data = await this.usecases.connectEvolution(request.user!, request.params.instanceName);
+      const data = await this.evolutionUsecases.connectEvolution(request.user!, request.params.instanceName);
       return data;
     } catch (err: any) {
-      reply.status(500).send({ error: err.message || 'Failed to fetch connection QR.' });
+      reply.status(500).send({ error: err.message || 'Failed to connect to Evolution instance.' });
+    }
+  }
+
+  async getMediaByWhatsAppId(request: FastifyRequest<{ Params: { instanceName: string; messageId: string } }>, reply: FastifyReply) {
+    try {
+      const data = await this.evolutionUsecases.getBase64FromMediaMessage(request.params.instanceName, request.params.messageId);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to fetch media from Evolution.' });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // AUTH & USERS
+  // ---------------------------------------------------------------------------
+  async login(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
+    const { email, password } = request.body as any;
+    try {
+      const data = await this.userUsecases.login(email, password);
+      return data;
+    } catch (err: any) {
+      reply.status(401).send({ error: err.message || 'Login failed.' });
+    }
+  }
+
+  async getUsers(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const data = await this.userUsecases.getUsers(request.user!);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to fetch users.' });
+    }
+  }
+
+  async createUser(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
+    try {
+      const data = await this.userUsecases.createUser(request.user!, request.body as any);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to create user.' });
+    }
+  }
+
+  async updateUser(request: FastifyRequest<{ Params: { id: string }; Body: any }>, reply: FastifyReply) {
+    const id = parseInt(request.params.id, 10);
+    try {
+      const data = await this.userUsecases.updateUser(request.user!, id, request.body as any);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to update user.' });
+    }
+  }
+
+  async deleteUser(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    const id = parseInt(request.params.id, 10);
+    try {
+      await this.userUsecases.deleteUser(request.user!, id);
+      return { message: 'User deleted successfully' };
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to delete user.' });
     }
   }
 }

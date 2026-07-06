@@ -1,23 +1,24 @@
-import { useState, useEffect } from 'react';
-import { api, Lead } from '../services/api';
+import { useState, useEffect, useCallback } from 'react';
+import { api } from '../services/api';
+import type { Lead } from '../services/api';
 
-export function useLeads() {
+export function useLeads(token: string | null, empresaId?: string | number, agentId?: string | number) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getLeads();
+      const data = await api.getLeads(String(empresaId || ''), String(agentId || ''));
       setLeads(data);
     } catch (err: any) {
       setError(err.message || 'Erro ao buscar leads');
     } finally {
       setLoading(false);
     }
-  };
+  }, [empresaId, agentId]);
 
   const createLead = async (leadData: Partial<Lead>) => {
     setError(null);
@@ -55,8 +56,12 @@ export function useLeads() {
   };
 
   useEffect(() => {
-    fetchLeads();
-  }, []);
+    if (token) {
+      fetchLeads();
+    } else {
+      setLeads([]);
+    }
+  }, [token, fetchLeads]);
 
   return {
     leads,

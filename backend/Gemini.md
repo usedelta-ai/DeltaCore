@@ -31,8 +31,10 @@ src/
     *   **NÃO** deve importar nada de bibliotecas externas (como Express, ORMs, bibliotecas de hash específicas).
 2.  **Ports (Portas)**:
     *   Interfaces TypeScript puras.
-    *   **Portas de Entrada (Driver/Primary)**: Métodos que a aplicação expõe para o mundo exterior (e.g., `CreateUserUseCase`).
-    *   **Portas de Saída (Driven/Secondary)**: Abstrações das ferramentas que a aplicação precisa usar (e.g., `UserRepository`, `NotificationGateway`).
+    *   **Portas de Entrada (Driver/Primary)**: Métodos que a aplicação expõe para o mundo exterior. **SOLID/SRP (Single Responsibility Principle)**: As portas de entrada devem ser divididas estritamente por contexto de domínio/entidade (e.g., `EmpresaUsecases.ts`, `AgentUsecases.ts`, `LeadUsecases.ts`, `ChatUsecases.ts`) em vez de agrupadas em uma única porta gigante.
+    *   **Portas de Saída (Driven/Secondary)**: Abstrações de banco de dados e APIs externas (e.g., `DBPort.ts`, `EvolutionAPIPort.ts`).
+3.  **Domain Usecases**:
+    *   As implementações dos casos de uso (e.g., `EmpresaUsecasesImpl.ts`, `AgentUsecasesImpl.ts`) devem residir em arquivos separados para garantir alta coesão e facilidade de manutenção. Cada serviço/usecase cuida apenas de suas entidades correspondentes e validações associadas.
 3.  **Adapters (Adaptadores)**:
     *   **Adaptadores de Entrada (Driver)**: Capturam a requisição externa, convertem os dados brutos e chamam um Caso de Uso usando a interface apropriada.
     *   **Adaptadores de Saída (Driven)**: Implementam as portas de saída. Aqui ficam as queries de SQL, chamadas Axios, envio de emails, etc.
