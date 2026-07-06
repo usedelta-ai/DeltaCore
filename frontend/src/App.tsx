@@ -76,18 +76,7 @@ export default function App() {
   const [empresaName, setEmpresaName] = useState('');
   const [empresaLogo, setEmpresaLogo] = useState<string | null>(null);
 
-  const [agentName, setAgentName] = useState('');
-  const [agentPrompt, setAgentPrompt] = useState('');
-  const [agentPhone, setAgentPhone] = useState('');
-  const [agentInstance, setAgentInstance] = useState('');
-  const [agentStatus, setAgentStatus] = useState<number>(1);
-  const [agentEmpresaId, setAgentEmpresaId] = useState<number>(0);
-  const [agentUpsertLead, setAgentUpsertLead] = useState(true);
-  const [agentTranslations] = useState('{}');
-  const agentSearch = false;
-  const agentSearchData = '{\n  "itens": [],\n  "filters": {},\n  "schema": {}\n}';
-  const agentValidate = false;
-  const agentValidateData = '{\n  "itens": [],\n  "filters": {},\n  "schema": {}\n}';
+  const [agentEditData, setAgentEditData] = useState<any>(null);
 
   const [followOrder, setFollowOrder] = useState<number>(1);
   const [followMessage, setFollowMessage] = useState('');
@@ -111,8 +100,6 @@ export default function App() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [historySource, setHistorySource] = useState<string>('');
   const [historyTable, setHistoryTable] = useState<string>('');
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [liveMonitoring, setLiveMonitoring] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [isMainSidebarCollapsed, setIsMainSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar_collapsed');
@@ -286,7 +273,7 @@ export default function App() {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
-  }, [chatHistory, loadingHistory, selectedLeadId]);
+  }, [chatHistory, selectedLeadId]);
 
   useEffect(() => {
     if (activeTab === 'messages') {
@@ -322,8 +309,7 @@ export default function App() {
   // Load chat history
   useEffect(() => {
     if (activeTab === 'messages' && selectedLeadId) {
-      const loadHistory = async () => {
-        setLoadingHistory(true);
+      (async () => {
         try {
           const res = await api.getLeadAgentHistory(selectedLeadId);
           setChatHistory(res.messages);
@@ -331,28 +317,34 @@ export default function App() {
           setHistoryTable(res.tableName || '');
         } catch (err: any) {
           setError(err.message || 'Erro ao carregar chat');
-        } finally {
-          setLoadingHistory(false);
         }
-      };
-      loadHistory();
+      })();
     }
   }, [selectedLeadId, activeTab]);
 
-  // Live monitor
+  // Live monitor — polls when a non‑finalized lead is selected
   useEffect(() => {
-    let ticker: any;
-    if (activeTab === 'messages' && selectedLeadId && liveMonitoring) {
-      ticker = setInterval(async () => {
-        try {
-          const historyRes = await api.getLeadAgentHistory(selectedLeadId);
-          setChatHistory(historyRes.messages);
-          refetchLeads();
-        } catch (_) {}
-      }, 3000);
-    }
+    if (!(activeTab === 'messages' && selectedLeadId)) return;
+    const lead = getFilteredLeads().find(l => l.id === selectedLeadId);
+    if (!lead || lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO') return;
+    const ticker = setInterval(async () => {
+      try {
+        const historyRes = await api.getLeadAgentHistory(selectedLeadId);
+        setChatHistory(prev => {
+          const newMsgs = historyRes.messages;
+          if (prev.length !== newMsgs.length) return newMsgs;
+          if (prev.length > 0 && newMsgs.length > 0) {
+            const a = prev[prev.length - 1];
+            const b = newMsgs[newMsgs.length - 1];
+            if (a.id !== b.id || a.content !== b.content) return newMsgs;
+          }
+          return prev;
+        });
+        refetchLeads();
+      } catch (_) {}
+    }, 3000);
     return () => clearInterval(ticker);
-  }, [selectedLeadId, activeTab, liveMonitoring]);
+  }, [selectedLeadId, activeTab]);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -394,6 +386,12 @@ export default function App() {
     }
   }, [activeTab, isFormOpen]);
 
+  useEffect(() => {
+    if (!isFormOpen) {
+      setAgentEditData(null);
+    }
+  }, [isFormOpen]);
+
   const openCreateForm = () => {
     if (!hasWritePermission) return;
     setEditingId(null);
@@ -403,13 +401,20 @@ export default function App() {
       setEmpresaName('');
       setEmpresaLogo(null);
     } else if (activeTab === 'agents') {
-      setAgentName('');
-      setAgentPrompt('');
-      setAgentPhone('');
-      setAgentInstance('');
-      setAgentStatus(1);
-      setAgentEmpresaId(isSuperAdmin ? empresas[0]?.id || 0 : (companyId || 0));
-      setAgentUpsertLead(true);
+      setAgentEditData({
+        name: '',
+        prompt: '',
+        phone_number: '',
+        instance_name: '',
+        status: 1,
+        empresa_id: isSuperAdmin ? empresas[0]?.id || 0 : (companyId || 0),
+        upsert_lead: true,
+        translations: {},
+        search: false,
+        search_data: { itens: [], filters: {}, schema: {} },
+        validate: false,
+        validate_data: { itens: [], filters: {}, schema: {} },
+      });
     } else if (activeTab === 'follow-ups') {
       setFollowOrder(1);
       setFollowMessage('');
@@ -440,13 +445,7 @@ export default function App() {
       setEmpresaName(item.name);
       setEmpresaLogo(item.logo);
     } else if (activeTab === 'agents') {
-      setAgentName(item.name);
-      setAgentPrompt(item.prompt || '');
-      setAgentPhone(item.phone_number || '');
-      setAgentInstance(item.instance_name || '');
-      setAgentStatus(item.status);
-      setAgentEmpresaId(item.empresa_id);
-      setAgentUpsertLead(item.upsert_lead);
+      setAgentEditData(item);
     } else if (activeTab === 'follow-ups') {
       setFollowOrder(item.order);
       setFollowMessage(item.message);
@@ -480,22 +479,6 @@ export default function App() {
         } else {
           await createEmpresa(empresaName, empresaLogo);
         }
-      } else if (activeTab === 'agents') {
-        const payload = {
-          name: agentName, prompt: agentPrompt, phone_number: agentPhone,
-          instance_name: agentInstance, status: agentStatus, empresa_id: agentEmpresaId,
-          upsert_lead: agentUpsertLead,
-          translations: JSON.parse(agentTranslations || '{}'),
-          search: agentSearch,
-          search_data: JSON.parse(agentSearchData || '{"itens": [], "filters": {}, "schema": {}}'),
-          validate: agentValidate,
-          validate_data: JSON.parse(agentValidateData || '{"itens": [], "filters": {}, "schema": {}}')
-        };
-        if (editingId) {
-          await updateAgent(editingId, payload);
-        } else {
-          await createAgent(payload);
-        }
       } else if (activeTab === 'follow-ups') {
         const payload = {
           order: followOrder, message: followMessage, time: followTime,
@@ -521,6 +504,24 @@ export default function App() {
         }
       }
       setIsFormOpen(false);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao salvar');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAgentSave = async (payload: any) => {
+    setActionLoading(true);
+    setError(null);
+    try {
+      if (editingId) {
+        await updateAgent(editingId, payload);
+      } else {
+        await createAgent(payload);
+      }
+      setIsFormOpen(false);
+      setAgentEditData(null);
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar');
     } finally {
@@ -557,6 +558,7 @@ export default function App() {
     if (activeTab === 'agents') return loadingAg || loadingEmp;
     if (activeTab === 'follow-ups') return loadingFl || loadingAg;
     if (activeTab === 'leads') return loadingLd || loadingAg || loadingFl;
+    if (activeTab === 'messages') return false;
     return loadingLd || loadingAg || loadingEmp;
   };
 
@@ -775,23 +777,10 @@ export default function App() {
                 isFormOpen={isFormOpen}
                 setIsFormOpen={setIsFormOpen}
                 editingId={editingId}
-                agentName={agentName}
-                setAgentName={setAgentName}
-                agentEmpresaId={agentEmpresaId}
-                setAgentEmpresaId={setAgentEmpresaId}
-                agentPrompt={agentPrompt}
-                setAgentPrompt={setAgentPrompt}
-                agentPhone={agentPhone}
-                setAgentPhone={setAgentPhone}
-                agentInstance={agentInstance}
-                setAgentInstance={setAgentInstance}
-                agentStatus={agentStatus}
-                setAgentStatus={setAgentStatus}
-                agentUpsertLead={agentUpsertLead}
-                setAgentUpsertLead={setAgentUpsertLead}
+                agentEditData={agentEditData}
+                handleAgentSave={handleAgentSave}
                 evolutionInstances={evolutionInstances}
                 actionLoading={actionLoading}
-                handleSave={handleSave}
                 deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
                 handleDelete={handleDelete}
                 setDeleteModal={setDeleteModal}
@@ -876,10 +865,7 @@ export default function App() {
                 getGroupedLeads={getGroupedLeads}
                 selectedLeadId={selectedLeadId}
                 setSelectedLeadId={setSelectedLeadId}
-                liveMonitoring={liveMonitoring}
-                setLiveMonitoring={setLiveMonitoring}
                 chatHistory={chatHistory}
-                loadingHistory={loadingHistory}
                 historySource={historySource}
                 historyTable={historyTable}
                 chatContainerRef={chatContainerRef}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Bot, User, Send, Mic, Smile } from 'lucide-react';
 import type { Lead, Agent, Empresa, ChatMessage } from '../services/api';
 import { api } from '../services/api';
@@ -111,6 +111,8 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
   const recordingDurationRef = useRef(0);
+  const lastPresenceSentRef = useRef<number>(0);
+  const presenceTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [activeEmojiCategory, setActiveEmojiCategory] = useState(0);
 
@@ -184,7 +186,22 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     setShowEmojiPicker(false);
   };
 
+  const sendPresence = useCallback(async (leadId: number, presence: 'composing' | 'recording') => {
+    const now = Date.now();
+    const minInterval = presence === 'recording' ? 10000 : 5000;
+    if (now - lastPresenceSentRef.current < minInterval) return;
+    lastPresenceSentRef.current = now;
+    try {
+      await api.sendPresence(leadId, presence);
+    } catch {
+      // best effort - silencioso
+    }
+  }, []);
+
   const startRecording = useCallback(async () => {
+    if (selectedLeadForModal) {
+      sendPresence(selectedLeadForModal.id, 'recording');
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -236,7 +253,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     } catch {
       alert('Não foi possível acessar o microfone. Verifique as permissões.');
     }
-  }, []);
+  }, [selectedLeadForModal, sendPresence]);
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -490,11 +507,6 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     return content
       .replace(/<\/?[a-zA-Z]+Msg>/g, '')
       .trim();
-  };
-
-  const isTextMessage = (msg: ChatMessage) => {
-    const mt = (msg.messageType || '').toLowerCase();
-    return !mt || mt === 'conversation' || mt === 'extendedtextmessage' || mt === 'text';
   };
 
   // Translation helpers matching the n8n logic
@@ -924,6 +936,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                       <option value="HUMANO">HUMANO</option>
                       <option value="FINALIZADO">FINALIZADO</option>
                       <option value="CONCLUIDO">FATURADO</option>
+                      <option value="CANCELADO">CANCELADO</option>
                     </select>
                   </div>
                 </div>
@@ -1018,6 +1031,71 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                   return modalChatHistory.map((msg, idx) => {
                     const role = (msg.role || '').toLowerCase();
                     const source = (msg.source || '').toLowerCase();
+
+                    // ── System events (human takeover, finalized) ──
+                    if (role === 'system_event') {
+                      const eventDate = msg.createdAt ? new Date(msg.createdAt) : null;
+                      const formattedDate = eventDate
+                        ? eventDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + eventDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                        : '';
+                      const eventColor = msg.content?.includes('✅') ? '#16a34a' : '#7c3aed';
+                      return (
+                        <div key={msg.id || idx} style={{
+                          alignSelf: 'center',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '3px',
+                          padding: '8px 16px 6px',
+                          margin: '6px 0',
+                          width: '100%',
+                        }}>
+                          <div style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                          }}>
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                              <div style={{
+                                flex: 1,
+                                height: '2px',
+                                background: `linear-gradient(to right, transparent, ${eventColor}44, ${eventColor}88)`,
+                                borderRadius: '1px',
+                              }} />
+                              <span style={{ color: eventColor, fontSize: '10px', marginLeft: '4px' }}>◆</span>
+                            </div>
+                            <span style={{
+                              fontSize: '12px',
+                              color: eventColor,
+                              fontWeight: 700,
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap',
+                              background: `${eventColor}11`,
+                              padding: '3px 14px',
+                              borderRadius: '12px',
+                            }}>
+                              {msg.content}
+                            </span>
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                              <span style={{ color: eventColor, fontSize: '10px', marginRight: '4px' }}>◆</span>
+                              <div style={{
+                                flex: 1,
+                                height: '2px',
+                                background: `linear-gradient(to left, transparent, ${eventColor}44, ${eventColor}88)`,
+                                borderRadius: '1px',
+                              }} />
+                            </div>
+                          </div>
+                          {formattedDate && (
+                            <span style={{ fontSize: '11px', color: '#8696a0', fontWeight: 500, letterSpacing: '0.3px' }}>
+                              {formattedDate}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    }
+
                     const isSentByUs = role === 'attendant' || role === 'assistant' || role === 'bot' || role === 'admin' || role === 'ai' || source === 'bot' || source === 'operator' || source === 'platform' || source === 'ai';
                     const isAi = role === 'assistant' || role === 'bot' || role === 'ai' || source === 'bot' || source === 'ai';
                     const                     isAttendant = role === 'attendant' || source === 'platform';
@@ -1047,7 +1125,10 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                         <div
                           className={`wpp-bubble ${isSentByUs ? 'sent' : 'received'}`}
                           onClick={() => { if (isSentByUs || isFromClient) setReplyToMessage(msg); }}
-                          style={{ cursor: (isSentByUs || isFromClient) ? 'pointer' : 'default' }}
+                          style={{
+                            cursor: (isSentByUs || isFromClient) ? 'pointer' : 'default',
+                            ...(isAttendant ? { background: '#dbeafe' } : {}),
+                          }}
                         >
                           {msg.quoted_message_text && (
                             <div style={{ borderLeft: '3px solid #25d366', paddingLeft: '8px', fontSize: '12px', color: '#667781', marginBottom: '6px', fontStyle: 'italic' }}>
@@ -1242,6 +1323,13 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                           placeholder="Digite uma mensagem"
                           ref={messageInputRef}
                           disabled={sendingMessage}
+                          onChange={() => {
+                            if (!selectedLeadForModal) return;
+                            if (messageInputRef.current?.value.trim()) {
+                              sendPresence(selectedLeadForModal.id, 'composing');
+                              if (presenceTypingTimerRef.current) clearTimeout(presenceTypingTimerRef.current);
+                            }
+                          }}
                           onKeyDown={e => {
                             if (e.key === 'Escape') {
                               setReplyToMessage(null);
@@ -1300,6 +1388,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                   <option value="HUMANO">HUMANO</option>
                   <option value="FINALIZADO">FINALIZADO</option>
                   <option value="CONCLUIDO">CONCLUIDO</option>
+                  <option value="CANCELADO">CANCELADO</option>
                 </select>
               </div>
               <div className="form-group">

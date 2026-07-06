@@ -76,6 +76,8 @@ export interface FollowUpSetting {
   created_at: string;
 }
 
+export type LeadStatus = 'NOVO' | 'HUMANO' | 'FINALIZADO' | 'CONCLUIDO' | 'CANCELADO';
+
 export interface Lead {
   id: number;
   agent_id: number;
@@ -83,7 +85,7 @@ export interface Lead {
   remote_jid_alt: string;
   name: string | null;
   custom_properties: Record<string, any> | null;
-  status: string;
+  status: LeadStatus;
   taken_over_at: string | null;
   take_over_expires_at: string | null;
   updated_at: string | null;
@@ -97,7 +99,7 @@ export interface Lead {
 }
 
 export interface ChatMessage {
-  id: number;
+  id: number | string;
   sessionId?: string;
   content: string;
   role?: string;
@@ -178,12 +180,17 @@ export const api = {
     method: 'DELETE',
   }),
 
+  sendPresence: (leadId: number, presence: 'composing' | 'recording') => request<any>(`/api/leads/${leadId}/presence`, {
+    method: 'POST',
+    body: JSON.stringify({ presence }),
+  }),
+
   // Messages History
   getAgentHistory: (agentId: number) => request<HistoryResponse>(`/api/agents/${agentId}/history`),
   getLeadHistory: (leadId: number) => request<HistoryResponse>(`/api/leads/${leadId}/history`),
   getLeadAgentHistory: (leadId: number) => request<HistoryResponse>(`/api/leads/${leadId}/agent-history`),
-  getMessageMedia: (messageId: number) => request<{ base64: string }>(`/api/messages/${messageId}/media`),
-  sendLeadMessage: (leadId: number, text: string, options?: { messageType?: string; mediaBase64?: string; fileName?: string; quotedMessageId?: number }) => request<any>(`/api/leads/${leadId}/send-message`, {
+  getMessageMedia: (messageId: number | string) => request<{ base64: string }>(`/api/messages/${messageId}/media`),
+  sendLeadMessage: (leadId: number, text: string, options?: { messageType?: string; mediaBase64?: string; fileName?: string; quotedMessageId?: number | string }) => request<any>(`/api/leads/${leadId}/send-message`, {
     method: 'POST',
     body: JSON.stringify({ message: text, ...options })
   }),

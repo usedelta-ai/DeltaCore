@@ -233,9 +233,9 @@ class MainController {
     }
     async sendMessage(request, reply) {
         const leadId = parseInt(request.params.leadId, 10);
-        const { message } = request.body;
+        const { message, messageType, mediaBase64, fileName, quotedMessageId } = request.body;
         try {
-            const data = await this.chatUsecases.sendMessage(request.user, leadId, message);
+            const data = await this.chatUsecases.sendMessage(request.user, leadId, message, { messageType, mediaBase64, fileName, quotedMessageId });
             return data;
         }
         catch (err) {
@@ -269,7 +269,16 @@ class MainController {
             return data;
         }
         catch (err) {
-            reply.status(500).send({ error: err.message || 'Failed to fetch connection QR.' });
+            reply.status(500).send({ error: err.message || 'Failed to connect to Evolution instance.' });
+        }
+    }
+    async getMediaByWhatsAppId(request, reply) {
+        try {
+            const data = await this.evolutionUsecases.getBase64FromMediaMessage(request.params.instanceName, request.params.messageId);
+            return data;
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to fetch media from Evolution.' });
         }
     }
     // ---------------------------------------------------------------------------

@@ -69,9 +69,46 @@ export class ChatUsecasesImpl implements ChatUsecases {
 
     if (!lead.session_id) throw new Error('Lead has no session_id');
     const messages = await this.db.getLeadStandardMessages(lead.session_id);
+
+    const systemEvents: any[] = [];
+    const isHuman = lead.status === 'HUMANO';
+    const isFinalized = lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO';
+
+    if ((isHuman || isFinalized) && lead.taken_over_at) {
+      systemEvents.push({
+        id: `system-human-${lead.id}`,
+        type: 'system_event',
+        event: 'human_takeover',
+        content: lead.taken_motive
+          ? `🔁 Atendimento humano — ${lead.taken_motive}`
+          : '🔁 Atendimento humano iniciado',
+        role: 'system_event',
+        createdAt: new Date(lead.taken_over_at),
+      });
+    }
+
+    if (isFinalized) {
+      systemEvents.push({
+        id: `system-finalized-${lead.id}`,
+        type: 'system_event',
+        event: 'lead_finalized',
+        content: lead.status === 'CONCLUIDO'
+          ? '✅ Atendimento concluído'
+          : '✅ Atendimento finalizado',
+        role: 'system_event',
+        createdAt: lead.updated_at ? new Date(lead.updated_at) : new Date(),
+      });
+    }
+
+    const combined = [
+      ...messages.map((m: any) => ({ ...m, type: 'message' })),
+      ...systemEvents,
+    ];
+    combined.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
     return {
       source: 'standard_messages_table',
-      messages
+      messages: combined,
     };
   }
 
@@ -120,80 +157,174 @@ export class ChatUsecasesImpl implements ChatUsecases {
       } catch (_) { continue; }
 
       // Each row may be a single object or an array
-      const items: any[] = Array.isArray(parsed) ? parsed : [parsed];
+      let items: any[] = Array.isArray(parsed) ? parsed : [parsed];
+
+      // Some n8n tables wrap the array inside { type: "ai", content: "[...json..." }
+      // Detect this: single item with no 'role' but string 'content' that is a JSON array
+      if (items.length === 1 && !items[0].role && typeof items[0].content === 'string') {
+        try {
+          const nested = JSON.parse(items[0].content);
+          if (Array.isArray(nested)) {
+            items = nested;
+          }
+        } catch (_) {}
+      }
 
       // Find the user message text in this row to use for timestamp matching
       const humanItem = items.find((it: any) =>
         (it.role || '').toLowerCase() === 'human' || (it.role || '').toLowerCase() === 'user'
       );
-      const humanText: string = humanItem
+      const humanTextRaw: string = humanItem
         ? (typeof humanItem.content === 'string' ? humanItem.content : JSON.stringify(humanItem.content)).trim()
         : '';
 
-      // Find the closest standard message timestamp by matching user text
-      let anchorTime: Date | null = row.created_at ? new Date(row.created_at) : null;
-      if (!anchorTime && humanText) {
-        const match = standardMessages.find((m: any) =>
-          (m.content || '').trim() === humanText
+      // Strip XML tags for matching — n8n often wraps content in <userMsg> tags
+      const stripXml = (s: string) => s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      const humanTextClean = stripXml(humanTextRaw);
+
+      // Position tool events exactly between the user message and the next AI response
+      let anchorTime: Date | null = null;
+
+      if (humanTextClean) {
+        // Find the user message in standardMessages by cleaned content match
+        let userMsgIdx = standardMessages.findIndex((m: any) =>
+          stripXml((m.content || '').trim()) === humanTextClean ||
+          (m.content || '').trim().includes(humanTextClean) ||
+          humanTextClean.includes(stripXml((m.content || '').trim()))
         );
-        if (match) anchorTime = new Date((match as any).createdAt || (match as any).created_at);
+
+        // Fallback: find by first significant word (e.g. CPF number, name)
+        if (userMsgIdx === -1) {
+          const firstWord = humanTextClean.split(' ')[0];
+          if (firstWord.length > 3) {
+            userMsgIdx = standardMessages.findIndex((m: any) =>
+              stripXml((m.content || '').trim()).includes(firstWord)
+            );
+          }
+        }
+
+        if (userMsgIdx !== -1) {
+          const userMsg = standardMessages[userMsgIdx];
+          const userTime = new Date((userMsg as any).createdAt || (userMsg as any).created_at).getTime();
+
+          // Find the next AI/assistant message after this user message
+          let aiTime = userTime + 1000;
+          for (let j = userMsgIdx + 1; j < standardMessages.length; j++) {
+            const role = ((standardMessages[j] as any).role || '').toLowerCase();
+            const source = ((standardMessages[j] as any).source || '').toLowerCase();
+            if (role === 'assistant' || role === 'bot' || role === 'ai' || source === 'bot' || source === 'ai') {
+              aiTime = new Date((standardMessages[j] as any).createdAt || (standardMessages[j] as any).created_at).getTime();
+              break;
+            }
+          }
+
+          // Place tool events midway between user message and AI response
+          anchorTime = new Date(Math.round((userTime + aiTime) / 2));
+        }
       }
 
-      // Fallback: use the timestamp of the nearest standard message by index
+      // Fallback: use row created_at if no match found
+      if (!anchorTime) {
+        anchorTime = row.created_at ? new Date(row.created_at) : null;
+      }
+
+      // Last resort: use the timestamp of the nearest standard message by index
       if (!anchorTime && standardMessages.length > 0) {
         const safeIdx = Math.min(rowIdx, standardMessages.length - 1);
         anchorTime = new Date((standardMessages[safeIdx] as any).createdAt || (standardMessages[safeIdx] as any).created_at || Date.now());
       }
 
-      let eventOffset = 0;
+      // Collect tool calls and tool results by toolCallId within this row
+      const toolCallMap = new Map<string, any>();
+      const toolResultMap = new Map<string, any>();
+
       for (const item of items) {
         const role = (item.role || '').toLowerCase();
 
-        // tool_call: assistant with Array content
         if ((role === 'assistant' || role === 'ai') && Array.isArray(item.content)) {
-          const toolCalls = item.content.filter((tc: any) => tc.toolName || tc.tool_name || tc.name);
-          if (toolCalls.length === 0) continue;
-
-          const eventTime = anchorTime
-            ? new Date(anchorTime.getTime() + 500 + eventOffset)
-            : new Date();
-          eventOffset += 100;
-
-          toolEvents.push({
-            id: `tool-call-${row.id}-${eventOffset}`,
-            type: 'tool_call',
-            sessionId: row.session_id,
-            content: JSON.stringify(item.content),
-            rawMessage: item,
-            createdAt: eventTime,
-            role: 'tool_call',
-          });
+          for (const tc of item.content) {
+            if (tc.type === 'tool-call' || tc.toolName || tc.tool_name || tc.name) {
+              const callId = tc.toolCallId || tc.tool_call_id || `tc-${row.id}-${Math.random()}`;
+              toolCallMap.set(callId, tc);
+            }
+          }
         }
 
-        // tool_result: role === 'tool'
         if (role === 'tool' && Array.isArray(item.content)) {
-          const eventTime = anchorTime
-            ? new Date(anchorTime.getTime() + 600 + eventOffset)
-            : new Date();
-          eventOffset += 100;
-
-          toolEvents.push({
-            id: `tool-result-${row.id}-${eventOffset}`,
-            type: 'tool_result',
-            sessionId: row.session_id,
-            content: JSON.stringify(item.content),
-            rawMessage: item,
-            createdAt: eventTime,
-            role: 'tool_result',
-          });
+          for (const tr of item.content) {
+            if (tr.type === 'tool-result' || tr.toolName || tr.tool_name || tr.name) {
+              const callId = tr.toolCallId || tr.tool_call_id || `tr-${row.id}-${Math.random()}`;
+              toolResultMap.set(callId, tr);
+            }
+          }
         }
+      }
+
+      // Group by toolCallId — each group has call + result together
+      const allIds = new Set([...toolCallMap.keys(), ...toolResultMap.keys()]);
+      let eventOffset = 0;
+      for (const callId of allIds) {
+        const tc = toolCallMap.get(callId);
+        const tr = toolResultMap.get(callId);
+
+        const eventTime = anchorTime
+          ? new Date(anchorTime.getTime() + 500 + eventOffset)
+          : new Date();
+        eventOffset += 100;
+
+        const toolName = tc?.toolName || tc?.tool_name || tc?.name || tr?.toolName || 'unknown';
+        const args = tc?.args || tc?.arguments || null;
+        const result = tr?.result || null;
+
+        toolEvents.push({
+          id: `tool-group-${row.id}-${eventOffset}`,
+          type: 'tool_group',
+          sessionId: row.session_id,
+          content: JSON.stringify({ toolName, args, result }),
+          rawMessage: { toolName, args, result, toolCallId: callId },
+          createdAt: eventTime,
+          role: 'tool_group',
+        });
       }
     }
 
-    // ── 5) Merge standard messages + tool events, sort chronologically ──────────
+    // ── 5) Inject system events (human takeover, finalization) ─────────────────
+    const systemEvents: any[] = [];
+
+    const isHuman = lead.status === 'HUMANO';
+    const isFinalized = lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO';
+
+    if ((isHuman || isFinalized) && lead.taken_over_at) {
+      systemEvents.push({
+        id: `system-human-${lead.id}`,
+        type: 'system_event',
+        event: 'human_takeover',
+        content: lead.taken_motive
+          ? `🔁 Atendimento humano — ${lead.taken_motive}`
+          : '🔁 Atendimento humano iniciado',
+        role: 'system_event',
+        createdAt: new Date(lead.taken_over_at),
+      });
+    }
+
+    if (isFinalized) {
+      systemEvents.push({
+        id: `system-finalized-${lead.id}`,
+        type: 'system_event',
+        event: 'lead_finalized',
+        content: lead.status === 'CONCLUIDO'
+          ? '✅ Atendimento concluído'
+          : '✅ Atendimento finalizado',
+        role: 'system_event',
+        createdAt: lead.updated_at ? new Date(lead.updated_at) : new Date(),
+      });
+    }
+
+    // ── 6) Merge standard messages + tool events + system events, sort chronologically ──
     const combined = [
       ...standardMessages.map((m: any) => ({ ...m, type: 'message' })),
       ...toolEvents,
+      ...systemEvents,
     ];
     combined.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
@@ -215,6 +346,21 @@ export class ChatUsecasesImpl implements ChatUsecases {
     if (!instanceName) throw new Error('Agent has no instance configured');
 
     return this.evolution.getBase64FromMediaMessage(instanceName, message.message_id);
+  }
+
+  async sendPresence(user: UserSession, leadId: number, presence: 'composing' | 'recording'): Promise<void> {
+    const lead = await this.db.getLeadById(leadId);
+    if (!lead) throw new Error('Lead not found');
+    await this.checkCompanyAccessByAgent(user, lead.agent_id);
+
+    const agent = await this.db.getAgentById(lead.agent_id);
+    if (!agent) throw new Error('Agent not found for this lead');
+
+    const instanceName = agent.instance_name;
+    if (!instanceName) throw new Error('Agent has no Evolution API instance configured');
+
+    const cleanNumber = lead.remote_jid_alt.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+    await this.evolution.sendPresence(instanceName, cleanNumber, presence);
   }
 
   async sendMessage(user: UserSession, leadId: number, content: string, options?: { messageType?: string; mediaBase64?: string; fileName?: string; quotedMessageId?: number }): Promise<any> {

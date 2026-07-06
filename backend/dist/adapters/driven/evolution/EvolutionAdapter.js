@@ -60,15 +60,46 @@ class EvolutionAdapter {
             })
         });
     }
-    async sendTextMessage(instanceName, number, text) {
+    async sendTextMessage(instanceName, number, text, quoted) {
+        const body = {
+            number,
+            text,
+            delay: 1200,
+            linkPreview: true
+        };
+        if (quoted) {
+            body.quoted = { text: quoted };
+        }
         return evolutionRequest(`/message/sendText/${instanceName}`, {
             method: 'POST',
-            body: JSON.stringify({
-                number,
-                text,
-                delay: 1200,
-                linkPreview: true
-            })
+            body: JSON.stringify(body)
+        });
+    }
+    async sendMediaMessage(instanceName, number, mediaType, mediaBase64, options) {
+        const body = {
+            number,
+            mediatype: mediaType,
+            media: mediaBase64,
+            delay: options?.delay ?? 1200
+        };
+        if (options?.caption)
+            body.caption = options.caption;
+        if (options?.fileName)
+            body.fileName = options.fileName;
+        return evolutionRequest(`/message/sendMedia/${instanceName}`, {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+    }
+    async sendWhatsAppAudio(instanceName, number, audioBase64, options) {
+        const body = {
+            number,
+            audio: audioBase64,
+            delay: options?.delay ?? 1200
+        };
+        return evolutionRequest(`/message/sendWhatsAppAudio/${instanceName}`, {
+            method: 'POST',
+            body: JSON.stringify(body)
         });
     }
 }

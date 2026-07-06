@@ -66,9 +66,41 @@ class ChatUsecasesImpl {
         if (!lead.session_id)
             throw new Error('Lead has no session_id');
         const messages = await this.db.getLeadStandardMessages(lead.session_id);
+        const systemEvents = [];
+        const isHuman = lead.status === 'HUMANO';
+        const isFinalized = lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO';
+        if ((isHuman || isFinalized) && lead.taken_over_at) {
+            systemEvents.push({
+                id: `system-human-${lead.id}`,
+                type: 'system_event',
+                event: 'human_takeover',
+                content: lead.taken_motive
+                    ? `🔁 Atendimento humano — ${lead.taken_motive}`
+                    : '🔁 Atendimento humano iniciado',
+                role: 'system_event',
+                createdAt: new Date(lead.taken_over_at),
+            });
+        }
+        if (isFinalized) {
+            systemEvents.push({
+                id: `system-finalized-${lead.id}`,
+                type: 'system_event',
+                event: 'lead_finalized',
+                content: lead.status === 'CONCLUIDO'
+                    ? '✅ Atendimento concluído'
+                    : '✅ Atendimento finalizado',
+                role: 'system_event',
+                createdAt: lead.updated_at ? new Date(lead.updated_at) : new Date(),
+            });
+        }
+        const combined = [
+            ...messages.map((m) => ({ ...m, type: 'message' })),
+            ...systemEvents,
+        ];
+        combined.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         return {
             source: 'standard_messages_table',
-            messages
+            messages: combined,
         };
     }
     async getLeadAgentHistory(user, leadId) {
@@ -115,68 +147,145 @@ class ChatUsecasesImpl {
                 continue;
             }
             // Each row may be a single object or an array
-            const items = Array.isArray(parsed) ? parsed : [parsed];
+            let items = Array.isArray(parsed) ? parsed : [parsed];
+            // Some n8n tables wrap the array inside { type: "ai", content: "[...json..." }
+            // Detect this: single item with no 'role' but string 'content' that is a JSON array
+            if (items.length === 1 && !items[0].role && typeof items[0].content === 'string') {
+                try {
+                    const nested = JSON.parse(items[0].content);
+                    if (Array.isArray(nested)) {
+                        items = nested;
+                    }
+                }
+                catch (_) { }
+            }
             // Find the user message text in this row to use for timestamp matching
             const humanItem = items.find((it) => (it.role || '').toLowerCase() === 'human' || (it.role || '').toLowerCase() === 'user');
-            const humanText = humanItem
+            const humanTextRaw = humanItem
                 ? (typeof humanItem.content === 'string' ? humanItem.content : JSON.stringify(humanItem.content)).trim()
                 : '';
-            // Find the closest standard message timestamp by matching user text
-            let anchorTime = row.created_at ? new Date(row.created_at) : null;
-            if (!anchorTime && humanText) {
-                const match = standardMessages.find((m) => (m.content || '').trim() === humanText);
-                if (match)
-                    anchorTime = new Date(match.createdAt || match.created_at);
+            // Strip XML tags for matching — n8n often wraps content in <userMsg> tags
+            const stripXml = (s) => s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+            const humanTextClean = stripXml(humanTextRaw);
+            // Position tool events exactly between the user message and the next AI response
+            let anchorTime = null;
+            if (humanTextClean) {
+                // Find the user message in standardMessages by cleaned content match
+                let userMsgIdx = standardMessages.findIndex((m) => stripXml((m.content || '').trim()) === humanTextClean ||
+                    (m.content || '').trim().includes(humanTextClean) ||
+                    humanTextClean.includes(stripXml((m.content || '').trim())));
+                // Fallback: find by first significant word (e.g. CPF number, name)
+                if (userMsgIdx === -1) {
+                    const firstWord = humanTextClean.split(' ')[0];
+                    if (firstWord.length > 3) {
+                        userMsgIdx = standardMessages.findIndex((m) => stripXml((m.content || '').trim()).includes(firstWord));
+                    }
+                }
+                if (userMsgIdx !== -1) {
+                    const userMsg = standardMessages[userMsgIdx];
+                    const userTime = new Date(userMsg.createdAt || userMsg.created_at).getTime();
+                    // Find the next AI/assistant message after this user message
+                    let aiTime = userTime + 1000;
+                    for (let j = userMsgIdx + 1; j < standardMessages.length; j++) {
+                        const role = (standardMessages[j].role || '').toLowerCase();
+                        const source = (standardMessages[j].source || '').toLowerCase();
+                        if (role === 'assistant' || role === 'bot' || role === 'ai' || source === 'bot' || source === 'ai') {
+                            aiTime = new Date(standardMessages[j].createdAt || standardMessages[j].created_at).getTime();
+                            break;
+                        }
+                    }
+                    // Place tool events midway between user message and AI response
+                    anchorTime = new Date(Math.round((userTime + aiTime) / 2));
+                }
             }
-            // Fallback: use the timestamp of the nearest standard message by index
+            // Fallback: use row created_at if no match found
+            if (!anchorTime) {
+                anchorTime = row.created_at ? new Date(row.created_at) : null;
+            }
+            // Last resort: use the timestamp of the nearest standard message by index
             if (!anchorTime && standardMessages.length > 0) {
                 const safeIdx = Math.min(rowIdx, standardMessages.length - 1);
                 anchorTime = new Date(standardMessages[safeIdx].createdAt || standardMessages[safeIdx].created_at || Date.now());
             }
-            let eventOffset = 0;
+            // Collect tool calls and tool results by toolCallId within this row
+            const toolCallMap = new Map();
+            const toolResultMap = new Map();
             for (const item of items) {
                 const role = (item.role || '').toLowerCase();
-                // tool_call: assistant with Array content
                 if ((role === 'assistant' || role === 'ai') && Array.isArray(item.content)) {
-                    const toolCalls = item.content.filter((tc) => tc.toolName || tc.tool_name || tc.name);
-                    if (toolCalls.length === 0)
-                        continue;
-                    const eventTime = anchorTime
-                        ? new Date(anchorTime.getTime() + 500 + eventOffset)
-                        : new Date();
-                    eventOffset += 100;
-                    toolEvents.push({
-                        id: `tool-call-${row.id}-${eventOffset}`,
-                        type: 'tool_call',
-                        sessionId: row.session_id,
-                        content: JSON.stringify(item.content),
-                        rawMessage: item,
-                        createdAt: eventTime,
-                        role: 'tool_call',
-                    });
+                    for (const tc of item.content) {
+                        if (tc.type === 'tool-call' || tc.toolName || tc.tool_name || tc.name) {
+                            const callId = tc.toolCallId || tc.tool_call_id || `tc-${row.id}-${Math.random()}`;
+                            toolCallMap.set(callId, tc);
+                        }
+                    }
                 }
-                // tool_result: role === 'tool'
                 if (role === 'tool' && Array.isArray(item.content)) {
-                    const eventTime = anchorTime
-                        ? new Date(anchorTime.getTime() + 600 + eventOffset)
-                        : new Date();
-                    eventOffset += 100;
-                    toolEvents.push({
-                        id: `tool-result-${row.id}-${eventOffset}`,
-                        type: 'tool_result',
-                        sessionId: row.session_id,
-                        content: JSON.stringify(item.content),
-                        rawMessage: item,
-                        createdAt: eventTime,
-                        role: 'tool_result',
-                    });
+                    for (const tr of item.content) {
+                        if (tr.type === 'tool-result' || tr.toolName || tr.tool_name || tr.name) {
+                            const callId = tr.toolCallId || tr.tool_call_id || `tr-${row.id}-${Math.random()}`;
+                            toolResultMap.set(callId, tr);
+                        }
+                    }
                 }
             }
+            // Group by toolCallId — each group has call + result together
+            const allIds = new Set([...toolCallMap.keys(), ...toolResultMap.keys()]);
+            let eventOffset = 0;
+            for (const callId of allIds) {
+                const tc = toolCallMap.get(callId);
+                const tr = toolResultMap.get(callId);
+                const eventTime = anchorTime
+                    ? new Date(anchorTime.getTime() + 500 + eventOffset)
+                    : new Date();
+                eventOffset += 100;
+                const toolName = tc?.toolName || tc?.tool_name || tc?.name || tr?.toolName || 'unknown';
+                const args = tc?.args || tc?.arguments || null;
+                const result = tr?.result || null;
+                toolEvents.push({
+                    id: `tool-group-${row.id}-${eventOffset}`,
+                    type: 'tool_group',
+                    sessionId: row.session_id,
+                    content: JSON.stringify({ toolName, args, result }),
+                    rawMessage: { toolName, args, result, toolCallId: callId },
+                    createdAt: eventTime,
+                    role: 'tool_group',
+                });
+            }
         }
-        // ── 5) Merge standard messages + tool events, sort chronologically ──────────
+        // ── 5) Inject system events (human takeover, finalization) ─────────────────
+        const systemEvents = [];
+        const isHuman = lead.status === 'HUMANO';
+        const isFinalized = lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO';
+        if ((isHuman || isFinalized) && lead.taken_over_at) {
+            systemEvents.push({
+                id: `system-human-${lead.id}`,
+                type: 'system_event',
+                event: 'human_takeover',
+                content: lead.taken_motive
+                    ? `🔁 Atendimento humano — ${lead.taken_motive}`
+                    : '🔁 Atendimento humano iniciado',
+                role: 'system_event',
+                createdAt: new Date(lead.taken_over_at),
+            });
+        }
+        if (isFinalized) {
+            systemEvents.push({
+                id: `system-finalized-${lead.id}`,
+                type: 'system_event',
+                event: 'lead_finalized',
+                content: lead.status === 'CONCLUIDO'
+                    ? '✅ Atendimento concluído'
+                    : '✅ Atendimento finalizado',
+                role: 'system_event',
+                createdAt: lead.updated_at ? new Date(lead.updated_at) : new Date(),
+            });
+        }
+        // ── 6) Merge standard messages + tool events + system events, sort chronologically ──
         const combined = [
             ...standardMessages.map((m) => ({ ...m, type: 'message' })),
             ...toolEvents,
+            ...systemEvents,
         ];
         combined.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
         return {
@@ -198,7 +307,7 @@ class ChatUsecasesImpl {
             throw new Error('Agent has no instance configured');
         return this.evolution.getBase64FromMediaMessage(instanceName, message.message_id);
     }
-    async sendMessage(user, leadId, content) {
+    async sendMessage(user, leadId, content, options) {
         const lead = await this.db.getLeadById(leadId);
         if (!lead)
             throw new Error('Lead not found');
@@ -210,20 +319,57 @@ class ChatUsecasesImpl {
         if (!instanceName)
             throw new Error('Agent has no Evolution API instance configured');
         const cleanNumber = lead.remote_jid_alt.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+        // Resolve quoted message text if replying
+        let quotedText;
+        let finalContent = content;
+        if (options?.quotedMessageId) {
+            const quotedMsg = await this.db.getMessageById(options.quotedMessageId);
+            if (quotedMsg) {
+                quotedText = quotedMsg.content || undefined;
+                if (quotedText) {
+                    const quotedLines = quotedText.split('\n').map(l => `> ${l}`).join('\n');
+                    finalContent = `${quotedLines}\n\n${content}`;
+                }
+            }
+        }
         // Send via Evolution API
-        const response = await this.evolution.sendTextMessage(instanceName, cleanNumber, content);
+        let response;
+        if (options?.messageType && options?.messageType !== 'text' && options?.mediaBase64) {
+            const isAudio = options.messageType === 'audio';
+            if (isAudio) {
+                response = await this.evolution.sendWhatsAppAudio(instanceName, cleanNumber, options.mediaBase64);
+            }
+            else {
+                response = await this.evolution.sendMediaMessage(instanceName, cleanNumber, options.messageType, options.mediaBase64, {
+                    caption: finalContent || undefined,
+                    fileName: options.fileName
+                });
+            }
+        }
+        else {
+            response = await this.evolution.sendTextMessage(instanceName, cleanNumber, finalContent);
+        }
         const messageId = response?.key?.id || response?.message?.key?.id || `platform-${Date.now()}`;
         // Persist in DB
         const savedMsg = await this.db.createMessage({
             agent_id: lead.agent_id,
             session_id: lead.session_id || lead.remote_jid_alt,
-            content: content,
+            content: options?.mediaBase64 ? (options.fileName || content || '') : finalContent,
             role: 'attendant',
             source: 'platform',
             remote_jid: lead.remote_jid_alt,
-            message_type: 'text',
-            message_id: messageId
+            message_type: options?.messageType || 'text',
+            message_id: messageId,
+            quote_message_content: quotedText
         });
+        if (lead.status === 'NOVO') {
+            const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
+            await this.db.updateLead(leadId, {
+                status: 'HUMANO',
+                taken_motive: 'Atendimento iniciado pela plataforma',
+                take_over_expires_at: expiresAt
+            });
+        }
         return {
             success: true,
             message: savedMsg,

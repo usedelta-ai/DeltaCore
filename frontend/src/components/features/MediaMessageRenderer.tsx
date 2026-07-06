@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { api } from '../../services/api';
 
 interface MediaMessageRendererProps {
-  messageId: number;
+  messageId: number | string;
   messageType: string;
   content: string;
   instanceName?: string;

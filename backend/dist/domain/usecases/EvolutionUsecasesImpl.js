@@ -21,5 +21,8 @@ class EvolutionUsecasesImpl {
             throw new Error('Unauthorized');
         return this.evolution.connect(instanceName);
     }
+    async getBase64FromMediaMessage(instanceName, messageId) {
+        return this.evolution.getBase64FromMediaMessage(instanceName, messageId);
+    }
 }
 exports.EvolutionUsecasesImpl = EvolutionUsecasesImpl;

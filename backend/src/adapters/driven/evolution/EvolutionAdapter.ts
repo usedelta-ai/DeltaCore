@@ -104,4 +104,16 @@ export class EvolutionAdapter implements EvolutionAPIPort {
       body: JSON.stringify(body)
     });
   }
+
+  async sendPresence(instanceName: string, number: string, presence: 'composing' | 'recording'): Promise<any> {
+    const delay = presence === 'recording' ? 20000 : 10000;
+    return evolutionRequest(`/chat/sendPresence/${instanceName}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        number,
+        delay,
+        presence
+      })
+    });
+  }
 }

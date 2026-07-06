@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Image } from 'lucide-react';
 import type { Empresa } from '../services/api';
 import { getBoardUrl } from '../services/api';
 import { ConfirmationModal } from '../components/Modal';
@@ -97,27 +97,76 @@ export const EmpresasPage: React.FC<EmpresasPageProps> = ({
       </div>
 
       {isFormOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px', width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid hsl(var(--card-border))', paddingBottom: '12px', marginBottom: '20px' }}>
-              <h2>{editingId ? 'Editar' : 'Nova'} Empresa</h2>
-              <button onClick={() => setIsFormOpen(false)} className="btn-ghost">✕</button>
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          backgroundColor: 'rgba(9, 10, 12, 0.85)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '20px',
+        }}>
+          <div style={{
+            width: '100%', maxWidth: '560px',
+            background: 'hsl(var(--card))',
+            border: '1px solid hsl(var(--card-border))',
+            borderRadius: '20px',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid hsl(var(--card-border))' }}>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>{editingId ? 'Editar' : 'Nova'} Empresa</h2>
+              <button onClick={() => setIsFormOpen(false)} className="btn-ghost" style={{
+                width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '18px',
+                color: 'hsl(var(--muted-foreground))', background: 'transparent',
+              }}>✕</button>
             </div>
-            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px' }}>
               <div className="form-group">
-                <label>Nome da Empresa</label>
-                <input type="text" className="form-control" value={empresaName} onChange={e => setEmpresaName(e.target.value)} required />
+                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Nome da Empresa</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Ex: Minha Empresa Ltda"
+                  value={empresaName}
+                  onChange={e => setEmpresaName(e.target.value)}
+                  required
+                  style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
+                />
               </div>
+
               <div className="form-group">
-                <label>Logo (Imagem)</label>
-                <input type="file" accept="image/*" onChange={handleLogoUpload} />
-                {empresaLogo && (
-                  <img src={`data:image/png;base64,${empresaLogo}`} alt="Preview" style={{ marginTop: '10px', height: '60px', borderRadius: '8px' }} />
-                )}
+                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Logo</label>
+                <label style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  gap: '8px', cursor: 'pointer',
+                  border: '2px dashed hsl(var(--card-border))',
+                  borderRadius: '12px', padding: '24px',
+                  background: 'hsl(var(--background))',
+                  transition: 'all 0.2s',
+                }}
+                  onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLElement).style.borderColor = 'hsl(var(--primary))'; }}
+                  onDragLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = ''; }}
+                >
+                  {empresaLogo ? (
+                    <img src={`data:image/png;base64,${empresaLogo}`} alt="Preview" style={{ height: '80px', borderRadius: '12px', objectFit: 'contain' }} />
+                  ) : (
+                    <>
+                      <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'hsl(var(--card))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--muted-foreground))' }}>
+                        <Image size={24} />
+                      </div>
+                      <span style={{ fontSize: '13px', color: 'hsl(var(--muted-foreground))' }}>Clique para selecionar uma imagem</span>
+                    </>
+                  )}
+                  <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
+                </label>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid hsl(var(--card-border))', paddingTop: '16px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}>Salvar</button>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid hsl(var(--card-border))', paddingTop: '20px', marginTop: '4px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}
+                  style={{ padding: '10px 20px', borderRadius: '10px' }}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading}
+                  style={{ padding: '10px 20px', borderRadius: '10px' }}>Salvar</button>
               </div>
             </form>
           </div>

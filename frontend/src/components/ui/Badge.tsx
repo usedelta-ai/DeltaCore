@@ -5,6 +5,15 @@ interface BadgeProps {
 }
 
 export const Badge: React.FC<BadgeProps> = ({ status }) => {
+  const statusLabel = (s: string) => {
+    if (s === 'NOVO')       return 'Novo';
+    if (s === 'HUMANO')     return 'Humano';
+    if (s === 'FINALIZADO') return 'Finalizado';
+    if (s === 'CONCLUIDO')  return 'Faturado';
+    if (s === 'CANCELADO')  return 'Cancelado';
+    return s;
+  };
+
   const getLeadStatusBadgeClass = (s: string) => {
     if (s === 'NOVO')       return 'badge-info';      // Azul
     if (s === 'HUMANO')     return 'badge-warning';   // Âmbar
@@ -16,7 +25,7 @@ export const Badge: React.FC<BadgeProps> = ({ status }) => {
 
   return (
     <span className={`badge ${getLeadStatusBadgeClass(status)}`}>
-      {status}
+      {statusLabel(status)}
     </span>
   );
 };

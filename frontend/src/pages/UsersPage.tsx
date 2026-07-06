@@ -210,80 +210,161 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas }) => {
 
       {/* Create / Edit Modal */}
       {isFormOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '550px', width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid hsl(var(--card-border))', paddingBottom: '12px', marginBottom: '20px' }}>
-              <h2>{editingId ? 'Editar' : 'Novo'} Usuário</h2>
-              <button onClick={() => setIsFormOpen(false)} className="btn-ghost">✕</button>
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          backgroundColor: 'rgba(9, 10, 12, 0.85)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '20px',
+        }}>
+          <div style={{
+            width: '100%', maxWidth: '560px',
+            background: 'hsl(var(--card))',
+            border: '1px solid hsl(var(--card-border))',
+            borderRadius: '20px',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.15)',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid hsl(var(--card-border))' }}>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
+                {editingId ? 'Editar' : 'Novo'} Usuário
+              </h2>
+              <button onClick={() => setIsFormOpen(false)} className="btn-ghost" style={{
+                width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '18px',
+                color: 'hsl(var(--muted-foreground))', background: 'transparent',
+              }}>✕</button>
             </div>
-            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px' }}>
               <div className="form-group">
-                <label>Nome Completo</label>
-                <input type="text" className="form-control" value={userName} onChange={e => setUserName(e.target.value)} required disabled={actionLoading} />
+                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Nome Completo</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Ex: João Silva"
+                  value={userName}
+                  onChange={e => setUserName(e.target.value)}
+                  required disabled={actionLoading}
+                  style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
+                />
               </div>
+
               <div className="form-group">
-                <label>E-mail (Login)</label>
-                <input type="email" className="form-control" value={userEmail} onChange={e => setUserEmail(e.target.value)} required disabled={actionLoading} />
+                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>E-mail (Login)</label>
+                <input
+                  type="email"
+                  className="form-control"
+                  placeholder="Ex: joao@exemplo.com"
+                  value={userEmail}
+                  onChange={e => setUserEmail(e.target.value)}
+                  required disabled={actionLoading}
+                  style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
+                />
               </div>
+
               <div className="form-group">
-                <label>{editingId ? 'Nova Senha (Deixe em branco para não alterar)' : 'Senha'}</label>
+                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>
+                  {editingId ? 'Nova Senha (deixe em branco para manter)' : 'Senha'}
+                </label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     className="form-control"
-                    style={{ paddingRight: '48px' }}
+                    placeholder={editingId ? '••••••••' : 'Mínimo 6 caracteres'}
                     value={userPassword}
                     onChange={e => setUserPassword(e.target.value)}
                     required={!editingId}
                     disabled={actionLoading}
+                    style={{ padding: '12px 48px 12px 14px', fontSize: '14px', borderRadius: '10px' }}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     style={{
-                      position: 'absolute',
-                      right: '16px',
-                      top: '50%',
+                      position: 'absolute', right: '12px', top: '50%',
                       transform: 'translateY(-50%)',
                       color: 'hsl(var(--muted-foreground))',
-                      cursor: 'pointer',
-                      border: 'none',
-                      background: 'none',
-                      display: 'flex',
-                      alignItems: 'center'
+                      cursor: 'pointer', border: 'none', background: 'none',
+                      display: 'flex', alignItems: 'center', padding: '8px',
                     }}
                     disabled={actionLoading}
                   >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
-              <div className="form-group">
-                <label>Papel / Role</label>
-                <select className="form-control" value={userRole} onChange={e => setUserRole(e.target.value as any)} disabled={actionLoading}>
-                  <option value="superadmin">Super Admin Geral</option>
-                  <option value="manager">Gerente</option>
-                  <option value="employee">Funcionário</option>
-                </select>
-              </div>
-              {userRole !== 'superadmin' && (
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label>Empresa Vinculada</label>
-                  <select className="form-control" value={userEmpresaId} onChange={e => setUserEmpresaId(e.target.value)} required disabled={actionLoading}>
-                    <option value="">Selecione uma empresa...</option>
-                    {empresas.map(emp => (
-                      <option key={emp.id} value={emp.id}>{emp.name}</option>
-                    ))}
+                  <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Papel</label>
+                  <select
+                    className="form-control"
+                    value={userRole}
+                    onChange={e => setUserRole(e.target.value as any)}
+                    disabled={actionLoading}
+                    style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
+                  >
+                    <option value="superadmin">Super Admin</option>
+                    <option value="manager">Gerente</option>
+                    <option value="employee">Funcionário</option>
                   </select>
                 </div>
-              )}
-              <div className="form-group" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
-                <input type="checkbox" id="user-active-checkbox" checked={userActive} onChange={e => setUserActive(e.target.checked)} disabled={actionLoading} style={{ width: '18px', height: '18px', accentColor: 'hsl(var(--primary))' }} />
-                <label htmlFor="user-active-checkbox" style={{ margin: 0, cursor: 'pointer' }}>Usuário Ativo</label>
+
+                {userRole !== 'superadmin' ? (
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Empresa</label>
+                    <select
+                      className="form-control"
+                      value={userEmpresaId}
+                      onChange={e => setUserEmpresaId(e.target.value)}
+                      disabled={actionLoading}
+                      style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
+                    >
+                      <option value="">Selecione...</option>
+                      {empresas.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="form-group">
+                    <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Empresa</label>
+                    <div style={{
+                      padding: '12px 14px', fontSize: '14px', borderRadius: '10px',
+                      background: 'hsl(var(--background))',
+                      color: 'hsl(var(--muted-foreground))',
+                      border: '1px solid hsl(var(--card-border))',
+                    }}>
+                      Acesso global (sem vínculo)
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid hsl(var(--card-border))', paddingTop: '16px', marginTop: '10px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}>Salvar</button>
+
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '12px 16px', borderRadius: '10px',
+                background: 'hsl(var(--background))',
+                border: '1px solid hsl(var(--card-border))',
+                cursor: 'pointer', margin: 0,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={userActive}
+                  onChange={e => setUserActive(e.target.checked)}
+                  disabled={actionLoading}
+                  style={{ width: '18px', height: '18px', accentColor: 'hsl(var(--primary))' }}
+                />
+                <span style={{ fontSize: '14px', fontWeight: 500 }}>Usuário Ativo</span>
+              </label>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid hsl(var(--card-border))', paddingTop: '20px', marginTop: '4px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}
+                  style={{ padding: '10px 20px', borderRadius: '10px' }}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={actionLoading}
+                  style={{ padding: '10px 20px', borderRadius: '10px' }}>Salvar</button>
               </div>
             </form>
           </div>

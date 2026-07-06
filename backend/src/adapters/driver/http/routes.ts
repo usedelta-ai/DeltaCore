@@ -36,6 +36,7 @@ export async function setupRoutes(app: FastifyInstance, controller: MainControll
   app.get('/api/leads/:leadId/agent-history', (req: any, rep) => controller.getLeadAgentHistory(req, rep));
   app.get('/api/messages/:id/media', (req: any, rep) => controller.getMessageMedia(req, rep));
   app.post('/api/leads/:leadId/send-message', (req: any, rep) => controller.sendMessage(req, rep));
+  app.post('/api/leads/:leadId/presence', (req: any, rep) => controller.sendPresence(req, rep));
 
   // Evolution API
   app.get('/api/evolution/instances', (req, rep) => controller.getEvolutionInstances(req, rep));

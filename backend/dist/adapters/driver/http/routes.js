@@ -35,6 +35,7 @@ async function setupRoutes(app, controller) {
     app.get('/api/evolution/instances', (req, rep) => controller.getEvolutionInstances(req, rep));
     app.get('/api/evolution/connection-state/:instanceName', (req, rep) => controller.getEvolutionConnectionState(req, rep));
     app.get('/api/evolution/connect/:instanceName', (req, rep) => controller.connectEvolution(req, rep));
+    app.get('/api/media/:instanceName/:messageId', (req, rep) => controller.getMediaByWhatsAppId(req, rep));
     // Authentication (Public)
     app.post('/api/auth/login', (req, rep) => controller.login(req, rep));
     // Users (Protected)

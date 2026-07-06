@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Bot, User, Wrench, ArrowDownCircle, Circle, CheckCheck } from 'lucide-react';
 import type { ChatMessage } from '../services/api';
 import { MediaMessageRenderer } from '../components/features/MediaMessageRenderer';
@@ -25,10 +25,7 @@ interface MessagesPageProps {
   getGroupedLeads: () => any[];
   selectedLeadId: number | null;
   setSelectedLeadId: (id: number) => void;
-  liveMonitoring: boolean;
-  setLiveMonitoring: (val: boolean) => void;
   chatHistory: ChatMessage[];
-  loadingHistory: boolean;
   historySource: string;
   historyTable: string;
   chatContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -266,16 +263,174 @@ function N8nTurnBubble({ msg, agentName, systemLogo }: { msg: ChatMessage; agent
   );
 }
 
+function deepJsonFormat(value: any): any {
+  if (typeof value === 'string') {
+    try { const p = JSON.parse(value); return deepJsonFormat(p); } catch { return value; }
+  }
+  if (Array.isArray(value)) return value.map(deepJsonFormat);
+  if (value && typeof value === 'object') {
+    const r: any = {};
+    for (const [k, v] of Object.entries(value)) r[k] = deepJsonFormat(v);
+    return r;
+  }
+  return value;
+}
+
+function ToolGroupEvent({ msg, agentName, systemLogo }: { msg: ChatMessage; agentName?: string; systemLogo?: string | null }) {
+  const [showArgs, setShowArgs] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const parsed = tryParseJson(msg.content);
+  if (!parsed || !parsed.toolName) return null;
+
+  const { toolName, args, result } = parsed;
+  const hasResult = result !== null && result !== undefined && result !== '';
+  const argsStr = JSON.stringify(deepJsonFormat(args), null, 2);
+  const resultStr = hasResult ? JSON.stringify(deepJsonFormat(result), null, 2) : '';
+
+  return (
+    <div style={{
+      alignSelf: 'flex-end',
+      width: '460px',
+      maxWidth: '90%',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px',
+    }}>
+      <div style={{
+        background: '#ffffff',
+        borderRadius: '12px 0 12px 12px',
+        overflow: 'hidden',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+      }}>
+        {/* ── Agent header ── */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '8px 12px 4px',
+          fontSize: '11px',
+          fontWeight: 700,
+          color: '#0088cc',
+        }}>
+          {systemLogo ? (
+            <img src={systemLogo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'cover' }} />
+          ) : agentName ? (
+            <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: '#0088cc', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', fontWeight: 700 }}>{agentName[0].toUpperCase()}</div>
+          ) : (
+            <Bot size={11} />
+          )}
+          {agentName || 'Agente'}
+        </div>
+
+        {/* ── Tool name header ── */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '0 12px 8px',
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+            color: '#fff',
+            padding: '2px 10px',
+            borderRadius: '10px',
+            fontFamily: 'monospace',
+            fontSize: '10px',
+            fontWeight: 600,
+          }}>
+            <Wrench size={9} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+            {toolName}
+          </div>
+        </div>
+
+        {/* ── Args ── */}
+        {args && (
+          <>
+            <div
+              onClick={() => setShowArgs(p => !p)}
+              style={{
+                padding: '7px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                userSelect: 'none',
+                background: showArgs ? '#f5f3ff' : 'transparent',
+                borderTop: '1px solid #e9edef',
+                fontSize: '11px',
+                color: '#6b21a8',
+                fontWeight: 600,
+                transition: 'background 0.15s',
+              }}
+            >
+              <span>📥 Entrada</span>
+              <span style={{
+                fontSize: '9px',
+                color: '#7c3aed',
+                transition: 'transform 0.2s',
+                display: 'inline-block',
+                transform: showArgs ? 'rotate(90deg)' : 'none',
+              }}>▸</span>
+            </div>
+            {showArgs && (
+              <div style={{ padding: '10px 12px', background: '#faf9ff', borderTop: '1px solid #e9edef', maxHeight: '300px', overflow: 'auto' }}>
+                <JsonSyntaxHighlighter jsonStr={argsStr} />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Result ── */}
+        {hasResult && (
+          <>
+            <div
+              onClick={() => setShowResult(p => !p)}
+              style={{
+                padding: '7px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                userSelect: 'none',
+                background: showResult ? '#f0fdf4' : 'transparent',
+                borderTop: '1px solid #e9edef',
+                fontSize: '11px',
+                color: '#15803d',
+                fontWeight: 600,
+                transition: 'background 0.15s',
+              }}
+            >
+              <span>📤 Saída</span>
+              <span style={{
+                fontSize: '9px',
+                color: '#16a34a',
+                transition: 'transform 0.2s',
+                display: 'inline-block',
+                transform: showResult ? 'rotate(90deg)' : 'none',
+              }}>▸</span>
+            </div>
+            {showResult && (
+              <div style={{ padding: '10px 12px', background: '#fafffe', borderTop: '1px solid #e9edef', maxHeight: '300px', overflow: 'auto' }}>
+                <JsonSyntaxHighlighter jsonStr={resultStr} />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <div style={{ fontSize: '10px', color: '#667781', textAlign: 'right', paddingRight: '2px' }}>
+        {formatTime(msg.createdAt)}
+      </div>
+    </div>
+  );
+}
+
 export const MessagesPage: React.FC<MessagesPageProps> = ({
   chatSearchQuery,
   setChatSearchQuery,
   getGroupedLeads,
   selectedLeadId,
   setSelectedLeadId,
-  liveMonitoring,
-  setLiveMonitoring,
   chatHistory,
-  loadingHistory,
   historySource,
   historyTable,
   chatContainerRef,
@@ -283,10 +438,35 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
   userName,
   systemLogo,
 }) => {
-  const [collapsedAgents, setCollapsedAgents] = useState<Record<number, boolean>>({});
+  const [expandedAgents, setExpandedAgents] = useState<Record<number, boolean>>({});
+  const [hasLoadedChatInitial, setHasLoadedChatInitial] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  const toggleAgentCollapse = (agentId: number) => {
-    setCollapsedAgents(prev => ({
+  // Smart scroll: always scroll on initial load, only follow if at bottom on updates
+  useEffect(() => {
+    if (!chatContainerRef.current) return;
+    const el = chatContainerRef.current;
+
+    if (!hasLoadedChatInitial && chatHistory.length > 0) {
+      if (chatEndRef.current) {
+        chatEndRef.current.scrollIntoView({ behavior: 'instant' as any });
+      }
+      setHasLoadedChatInitial(true);
+    } else {
+      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+      if (isAtBottom && chatEndRef.current) {
+        chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  }, [chatHistory, hasLoadedChatInitial]);
+
+  // Reset initial load flag when selected lead changes
+  useEffect(() => {
+    setHasLoadedChatInitial(false);
+  }, [selectedLeadId]);
+
+  const toggleAgentExpand = (agentId: number) => {
+    setExpandedAgents(prev => ({
       ...prev,
       [agentId]: !prev[agentId]
     }));
@@ -321,7 +501,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
               {empGroup.agents.map((agGroup: any) => (
                 <div key={agGroup.agentId}>
                   <div
-                    onClick={() => toggleAgentCollapse(agGroup.agentId)}
+                    onClick={() => toggleAgentExpand(agGroup.agentId)}
                     style={{
                       padding: '8px 16px 4px 20px',
                       fontSize: '11px',
@@ -337,15 +517,17 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                     <Bot size={11} />
                     {agGroup.agentName}
                     <span style={{ marginLeft: 'auto', fontSize: '9px', opacity: 0.6 }}>
-                      {collapsedAgents[agGroup.agentId] ? '▶' : '▼'}
+                      {expandedAgents[agGroup.agentId] ? '▼' : '▶'}
                     </span>
                   </div>
-                  {!collapsedAgents[agGroup.agentId] && (
+                  {expandedAgents[agGroup.agentId] && (
                     <div>
                       {agGroup.leads.map((ld: any) => {
                         const isSelected = selectedLeadId === ld.id;
                         const isHuman = ld.status === 'HUMANO';
                         const isNew = ld.status === 'NOVO';
+                        const isFinalized = ld.status === 'FINALIZADO';
+                        const isConcluded = ld.status === 'CONCLUIDO';
 
                         return (
                           <button
@@ -392,13 +574,13 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                                   fontSize: '9px',
                                   padding: '2px 6px',
                                   borderRadius: '8px',
-                                  background: isHuman ? '#fff3e0' : isNew ? '#e3f2fd' : '#f1f8e9',
-                                  color: isHuman ? '#e65100' : isNew ? '#1565c0' : '#2e7d32',
                                   fontWeight: 600,
                                   flexShrink: 0,
                                   marginLeft: '4px',
+                                  background: isHuman ? '#fff3e0' : isNew ? '#e3f2fd' : isFinalized ? '#f3f0ff' : isConcluded ? '#f0fdf4' : '#f1f8e9',
+                                  color: isHuman ? '#e65100' : isNew ? '#1565c0' : isFinalized ? '#7c3aed' : isConcluded ? '#16a34a' : '#2e7d32',
                                 }}>
-                                  {isHuman ? 'Humano' : isNew ? 'Novo' : ld.status}
+                                  {isHuman ? 'Humano' : isNew ? 'Novo' : isFinalized ? 'Finalizado' : isConcluded ? 'Faturado' : ld.status}
                                 </span>
                               </div>
                               {ld.lastmessage && (
@@ -453,26 +635,20 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                   {historySource === 'dynamic_n8n_table_combined' ? `🤖 Histórico do Agente — ${historyTable}` : '💬 Mensagens WhatsApp'}
                 </div>
               </div>
-              <button
-                onClick={() => setLiveMonitoring(!liveMonitoring)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  background: liveMonitoring ? '#25d366' : '#e9edef',
-                  color: liveMonitoring ? '#fff' : '#667781',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <Circle size={8} style={{ fill: liveMonitoring ? '#fff' : '#667781' }} />
-                {liveMonitoring ? 'Ao Vivo' : 'Monitorar'}
-              </button>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '20px',
+                background: '#e8f5e9',
+                color: '#2e7d32',
+                fontSize: '11px',
+                fontWeight: 600,
+              }}>
+                <Circle size={8} style={{ fill: '#2e7d32' }} />
+                Ao Vivo
+              </div>
             </div>
 
             {/* Messages Feed */}
@@ -489,12 +665,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                 backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect width='400' height='400' fill='%23efeae2'/%3E%3Cg opacity='0.04'%3E%3Ccircle cx='50' cy='50' r='30' fill='none' stroke='%23000' stroke-width='1'/%3E%3Ccircle cx='150' cy='50' r='30' fill='none' stroke='%23000' stroke-width='1'/%3E%3C/g%3E%3C/svg%3E")`,
               }}
             >
-              {loadingHistory ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#667781' }}>
-                  <div style={{ fontSize: '24px', marginBottom: '8px' }}>💬</div>
-                  Carregando histórico...
-                </div>
-              ) : (() => {
+              {(() => {
                 // Look up agent name for the selected lead
                 let currentAgentName = '';
                 if (selectedLeadId) {
@@ -509,12 +680,81 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                   }
                 }
                 return chatHistory.map(msg => {
+                  const roleLower = (msg.role || '').toLowerCase();
                   const isAi =
-                    (msg.role || '').toLowerCase() === 'assistant' ||
-                    (msg.role || '').toLowerCase() === 'bot' ||
-                    (msg.role || '').toLowerCase() === 'ai' ||
+                    roleLower === 'assistant' ||
+                    roleLower === 'bot' ||
+                    roleLower === 'ai' ||
                     (msg.source || '').toLowerCase() === 'bot' ||
                     (msg.source || '').toLowerCase() === 'ai';
+
+                  // ── System events (human takeover, finalized) ──
+                  if (roleLower === 'system_event') {
+                    const eventDate = msg.createdAt ? new Date(msg.createdAt) : null;
+                    const formattedDate = eventDate
+                      ? eventDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + eventDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                      : '';
+                    const eventColor = msg.content?.includes('✅') ? '#16a34a' : '#7c3aed';
+                    return (
+                      <div key={msg.id} style={{
+                        alignSelf: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '3px',
+                        padding: '8px 16px 6px',
+                        margin: '6px 0',
+                      }}>
+                        <div style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}>
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                            <div style={{
+                              flex: 1,
+                              height: '2px',
+                              background: `linear-gradient(to right, transparent, ${eventColor}44, ${eventColor}88)`,
+                              borderRadius: '1px',
+                            }} />
+                            <span style={{ color: eventColor, fontSize: '10px', marginLeft: '4px' }}>◆</span>
+                          </div>
+                          <span style={{
+                            fontSize: '12px',
+                            color: eventColor,
+                            fontWeight: 700,
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap',
+                            background: `${eventColor}11`,
+                            padding: '3px 14px',
+                            borderRadius: '12px',
+                          }}>
+                            {msg.content}
+                          </span>
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+                            <span style={{ color: eventColor, fontSize: '10px', marginRight: '4px' }}>◆</span>
+                            <div style={{
+                              flex: 1,
+                              height: '2px',
+                              background: `linear-gradient(to left, transparent, ${eventColor}44, ${eventColor}88)`,
+                              borderRadius: '1px',
+                            }} />
+                          </div>
+                        </div>
+                        {formattedDate && (
+                          <span style={{ fontSize: '11px', color: '#8696a0', fontWeight: 500, letterSpacing: '0.3px' }}>
+                            {formattedDate}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // ── Tool group (call + result) from combined n8n + messages history ──
+                  if (roleLower === 'tool_group') {
+                    return <ToolGroupEvent key={msg.id} msg={msg} agentName={currentAgentName} systemLogo={systemLogo} />;
+                  }
 
                   // n8n JSON turn bubble
                   const parsedHistory = tryParseJson(msg.content);
@@ -529,6 +769,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                   const isAttendant = (msg.role || '').toLowerCase() === 'attendant' || (msg.source || '').toLowerCase() === 'platform';
                   const isFromClient = (msg.role || '').toLowerCase() === 'user' || (msg.role || '').toLowerCase() === 'human';
                   const isSentByUs = isAi || isAttendant || (msg.role || '').toLowerCase() === 'assistant' || (msg.role || '').toLowerCase() === 'admin' || (msg.source || '').toLowerCase() === 'operator';
+                  const bubbleBg = isAttendant ? '#dbeafe' : (isSentByUs ? '#d9fdd3' : '#ffffff');
                   const clientName = selectedLeadName || 'Lead';
                   const senderName = isAi ? (currentAgentName || 'Agente') : (isAttendant ? (userName || 'Atendente') : (isFromClient ? clientName : ''));
 
@@ -564,7 +805,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                     >
                       <div
                         style={{
-                          background: isSentByUs ? '#d9fdd3' : '#ffffff',
+                          background: bubbleBg,
                           borderRadius: isSentByUs ? '12px 0 12px 12px' : '0 12px 12px 12px',
                           padding: '8px 14px 22px 14px',
                           position: 'relative',
@@ -572,7 +813,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                           wordBreak: 'break-word',
                         }}
                       >
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#0088cc', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: isAttendant ? '#2563eb' : '#0088cc', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           {avatar}
                           {senderName}
                         </div>
@@ -597,6 +838,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({
                   );
                 });
               })()}
+              <div ref={chatEndRef} />
             </div>
           </>
         ) : (

@@ -242,6 +242,17 @@ export class MainController {
     }
   }
 
+  async sendPresence(request: FastifyRequest<{ Params: { leadId: string }; Body: { presence: 'composing' | 'recording' } }>, reply: FastifyReply) {
+    const leadId = parseInt(request.params.leadId, 10);
+    const { presence } = request.body;
+    try {
+      await this.chatUsecases.sendPresence(request.user!, leadId, presence);
+      return { success: true };
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to send presence.' });
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // EVOLUTION API
   // ---------------------------------------------------------------------------

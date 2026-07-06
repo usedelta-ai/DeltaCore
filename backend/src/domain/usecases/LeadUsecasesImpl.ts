@@ -1,7 +1,7 @@
 import { LeadUsecases } from '../../ports/driver/LeadUsecases';
 import { DBPort } from '../../ports/driven/DBPort';
 import { UserSession } from '../../adapters/driver/http/middlewares/AuthMiddleware';
-import { Lead } from '../entities/Lead';
+import { Lead, isValidLeadStatus } from '../entities/Lead';
 
 export class LeadUsecasesImpl implements LeadUsecases {
   constructor(private db: DBPort) {}
@@ -21,11 +21,17 @@ export class LeadUsecasesImpl implements LeadUsecases {
   }
 
   async createLead(user: UserSession, lead: Omit<Lead, 'id'>): Promise<Lead> {
+    if (lead.status && !isValidLeadStatus(lead.status)) {
+      throw new Error(`Invalid status "${lead.status}". Allowed: NOVO, HUMANO, FINALIZADO, CONCLUIDO, CANCELADO`);
+    }
     await this.checkCompanyAccessByAgent(user, lead.agent_id);
     return this.db.createLead(lead);
   }
 
   async updateLead(user: UserSession, id: number, lead: Partial<Lead>): Promise<Lead> {
+    if (lead.status && !isValidLeadStatus(lead.status)) {
+      throw new Error(`Invalid status "${lead.status}". Allowed: NOVO, HUMANO, FINALIZADO, CONCLUIDO, CANCELADO`);
+    }
     const existing = await this.db.getLeadById(id);
     if (!existing) throw new Error('Lead not found');
     await this.checkCompanyAccessByAgent(user, existing.agent_id);

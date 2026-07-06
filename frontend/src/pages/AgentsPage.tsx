@@ -2,6 +2,7 @@ import React from 'react';
 import { Pencil, Trash2, Building2 } from 'lucide-react';
 import type { Agent, Empresa } from '../services/api';
 import { ConfirmationModal } from '../components/Modal';
+import { AgentEditModal } from '../components/features/AgentEditModal';
 
 interface AgentsPageProps {
   getGroupedAgents: () => any[];
@@ -14,23 +15,10 @@ interface AgentsPageProps {
   isFormOpen: boolean;
   setIsFormOpen: (open: boolean) => void;
   editingId: number | null;
-  agentName: string;
-  setAgentName: (v: string) => void;
-  agentEmpresaId: number;
-  setAgentEmpresaId: (v: number) => void;
-  agentPrompt: string;
-  setAgentPrompt: (v: string) => void;
-  agentPhone: string;
-  setAgentPhone: (v: string) => void;
-  agentInstance: string;
-  setAgentInstance: (v: string) => void;
-  agentStatus: number;
-  setAgentStatus: (v: number) => void;
-  agentUpsertLead: boolean;
-  setAgentUpsertLead: (v: boolean) => void;
+  agentEditData: any;
+  handleAgentSave: (data: any) => Promise<void>;
   evolutionInstances: any[];
   actionLoading: boolean;
-  handleSave: (e: React.FormEvent) => void;
   deleteModal: { isOpen: boolean; id: number; name: string };
   handleDelete: () => void;
   setDeleteModal: (v: any) => void;
@@ -49,23 +37,10 @@ export const AgentsPage: React.FC<AgentsPageProps> = ({
   isFormOpen,
   setIsFormOpen,
   editingId,
-  agentName,
-  setAgentName,
-  agentEmpresaId,
-  setAgentEmpresaId,
-  agentPrompt,
-  setAgentPrompt,
-  agentPhone,
-  setAgentPhone,
-  agentInstance,
-  setAgentInstance,
-  agentStatus,
-  setAgentStatus,
-  agentUpsertLead,
-  setAgentUpsertLead,
+  agentEditData,
+  handleAgentSave,
   evolutionInstances,
   actionLoading,
-  handleSave,
   deleteModal,
   handleDelete,
   setDeleteModal,
@@ -139,64 +114,16 @@ export const AgentsPage: React.FC<AgentsPageProps> = ({
         ))}
       </div>
 
-      {isFormOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '600px', width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid hsl(var(--card-border))', paddingBottom: '12px', marginBottom: '20px' }}>
-              <h2>{editingId ? 'Editar' : 'Novo'} Agente</h2>
-              <button onClick={() => setIsFormOpen(false)} className="btn-ghost">✕</button>
-            </div>
-            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group">
-                <label>Nome do Agente</label>
-                <input type="text" className="form-control" value={agentName} onChange={e => setAgentName(e.target.value)} required />
-              </div>
-              {isSuperAdmin && (
-                <div className="form-group">
-                  <label>Empresa</label>
-                  <select className="form-control" value={agentEmpresaId} onChange={e => setAgentEmpresaId(Number(e.target.value))}>
-                    {empresas.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div className="form-group">
-                <label>Prompt</label>
-                <textarea className="form-control" rows={4} value={agentPrompt} onChange={e => setAgentPrompt(e.target.value)} required />
-              </div>
-              <div className="form-group">
-                <label>Telefone</label>
-                <input type="text" className="form-control" value={agentPhone} onChange={e => setAgentPhone(e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Instância da Evolution API</label>
-                <select className="form-control" value={agentInstance} onChange={e => setAgentInstance(e.target.value)}>
-                  <option value="">Selecione...</option>
-                  {evolutionInstances.map(inst => (
-                    <option key={inst.instanceName || inst.name} value={inst.instanceName || inst.name}>
-                      {inst.instanceName || inst.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Status</label>
-                <select className="form-control" value={agentStatus} onChange={e => setAgentStatus(Number(e.target.value))}>
-                  <option value={1}>Ativo</option>
-                  <option value={2}>Pendente</option>
-                </select>
-              </div>
-              <div className="form-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input type="checkbox" checked={agentUpsertLead} onChange={e => setAgentUpsertLead(e.target.checked)} />
-                <label style={{ margin: 0 }}>Upsert Lead</label>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid hsl(var(--card-border))', paddingTop: '16px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}>Salvar</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <AgentEditModal
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        onSave={handleAgentSave}
+        initialData={agentEditData}
+        empresas={empresas}
+        evolutionInstances={evolutionInstances}
+        isSuperAdmin={isSuperAdmin}
+        editingId={editingId}
+      />
 
       {qrModal.isOpen && (
         <div className="modal-overlay">

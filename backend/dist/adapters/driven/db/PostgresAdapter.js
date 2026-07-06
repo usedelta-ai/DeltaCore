@@ -343,8 +343,8 @@ class PostgresAdapter {
     }
     async createMessage(message) {
         const res = await db_1.default.query(`INSERT INTO public.messages 
-      (agent_id, session_id, content, role, source, remote_jid, message_type, message_id, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING *`, [
+      (agent_id, session_id, content, role, source, remote_jid, message_type, message_id, quote_message_content, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) RETURNING *`, [
             message.agent_id,
             message.session_id,
             message.content,
@@ -352,9 +352,22 @@ class PostgresAdapter {
             message.source,
             message.remote_jid,
             message.message_type,
-            message.message_id
+            message.message_id,
+            message.quote_message_content || null
         ]);
-        return res.rows[0];
+        const row = res.rows[0];
+        return {
+            id: row.id,
+            sessionId: row.session_id,
+            content: row.content,
+            role: row.role,
+            source: row.source,
+            createdAt: row.created_at,
+            remoteJid: row.remote_jid,
+            quoted_message_text: row.quote_message_content,
+            messageType: row.message_type,
+            messageId: row.message_id,
+        };
     }
     async getUsers(companyId) {
         let query = 'SELECT * FROM public.users WHERE active = true';
