@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { Bot, User, Send, Mic, Smile } from 'lucide-react';
 import type { Lead, Agent, Empresa, ChatMessage } from '../services/api';
 import { api } from '../services/api';
@@ -99,6 +99,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const chatBodyRef = useRef<HTMLDivElement | null>(null);
+  const wasAtBottomRef = useRef<boolean>(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [hasLoadedChatInitial, setHasLoadedChatInitial] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -442,25 +443,49 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     setHasLoadedChatInitial(false);
   }, [selectedLeadForModal]);
 
-  // Scroll chat to bottom when chat content updates
+  // Track scroll position dynamically
   useEffect(() => {
-    if (!chatBodyRef.current) return;
     const el = chatBodyRef.current;
-    
-    if (!hasLoadedChatInitial && modalChatHistory.length > 0) {
-      // Force scroll to bottom on initial load
-      if (chatEndRef.current) {
-        chatEndRef.current.scrollIntoView({ behavior: 'instant' as any });
-      }
+    if (!el) return;
+    const handleScroll = () => {
+      // Se a diferença for menor que 35px, consideramos que o scroll está no final
+      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 35;
+      wasAtBottomRef.current = isAtBottom;
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [selectedLeadForModal?.id]);
+
+  // Handle scroll positioning before paint (useLayoutEffect)
+  useLayoutEffect(() => {
+    const el = chatBodyRef.current;
+    if (!el) return;
+
+    // Apenas rola se não estiver mais carregando as mensagens e houver mensagens no histórico
+    if (!hasLoadedChatInitial && !loadingModalChat && modalChatHistory.length > 0) {
+      // Carga inicial: rola imediatamente para o final de forma síncrona
+      el.scrollTop = el.scrollHeight;
+      wasAtBottomRef.current = true;
+      
+      // Múltiplos disparos garantem o scroll final mesmo com imagens e mídias sendo renderizadas
+      const scrollAttempts = [80, 250, 600];
+      scrollAttempts.forEach((delay) => {
+        setTimeout(() => {
+          if (chatBodyRef.current) {
+            chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+          }
+          if (chatEndRef.current) {
+            chatEndRef.current.scrollIntoView({ behavior: 'instant' as any });
+          }
+        }, delay);
+      });
+      
       setHasLoadedChatInitial(true);
-    } else {
-      // Only scroll to bottom if user is already scrolled to the bottom
-      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-      if (isAtBottom && chatEndRef.current) {
-        chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
+    } else if (hasLoadedChatInitial && wasAtBottomRef.current) {
+      // Se já carregou inicialmente e estava no fundo antes de receber atualizações
+      el.scrollTop = el.scrollHeight;
     }
-  }, [modalChatHistory, hasLoadedChatInitial]);
+  }, [modalChatHistory, hasLoadedChatInitial, loadingModalChat]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
