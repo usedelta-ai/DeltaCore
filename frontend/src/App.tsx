@@ -34,14 +34,59 @@ export default function App() {
   const companyId = user?.empresa_id || null;
   const hasWritePermission = user?.role !== 'employee';
 
+  const getTenantBase64FromUrl = (): string | null => {
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    if (parts.length > 0) {
+      const first = parts[0];
+      try {
+        const decoded = atob(first);
+        if (/^\d+$/.test(decoded)) return first;
+      } catch (_) {}
+    }
+    return null;
+  };
+
+  const getRouteInfo = (): { tenantBase64: string | null; tab: Tab } => {
+    const pathname = window.location.pathname;
+    const parts = pathname.split('/').filter(Boolean);
+    let tenantBase64: string | null = null;
+    let tabStr = '';
+    
+    if (parts.length > 0) {
+      const first = parts[0];
+      let isTenant = false;
+      try {
+        const decoded = atob(first);
+        if (/^\d+$/.test(decoded)) {
+          isTenant = true;
+        }
+      } catch (_) {}
+      
+      if (isTenant) {
+        tenantBase64 = first;
+        tabStr = parts[1] || '';
+      } else {
+        tabStr = parts[0] || '';
+      }
+    }
+    
+    const validTabs: Tab[] = ['empresas', 'agents', 'follow-ups', 'leads', 'messages', 'users'];
+    let tab: Tab = isSuperAdmin ? 'empresas' : 'agents';
+    if (validTabs.includes(tabStr as Tab)) {
+      tab = tabStr as Tab;
+    }
+    
+    return { tenantBase64, tab };
+  };
+
   const [filterEmpresaId, setFilterEmpresaId] = useState<number | string>(() => {
     // Don't read URL params if we're on the messages tab (clean URL)
-    if (window.location.hash.startsWith('#messages')) return '';
+    if (window.location.pathname.includes('/messages')) return '';
     const params = new URLSearchParams(window.location.search);
     return params.get('empresa') || '';
   });
   const [filterAgentId, setFilterAgentId] = useState<number | string>(() => {
-    if (window.location.hash.startsWith('#messages')) return '';
+    if (window.location.pathname.includes('/messages')) return '';
     const params = new URLSearchParams(window.location.search);
     return params.get('agente') || '';
   });
@@ -55,17 +100,7 @@ export default function App() {
   const systemName = currentCompany ? currentCompany.name : (user?.empresa_name || 'DeltaAI Admin');
   const systemLogo = currentCompany ? currentCompany.logo : (user?.empresa_logo || null);
 
-  const getTabFromHash = (): Tab => {
-    const hash = window.location.hash.replace('#', '');
-    const tabPart = hash.split('?')[0];
-    const validTabs: Tab[] = ['empresas', 'agents', 'follow-ups', 'leads', 'messages', 'users'];
-    if (validTabs.includes(tabPart as Tab)) {
-      return tabPart as Tab;
-    }
-    return isSuperAdmin ? 'empresas' : 'agents';
-  };
-
-  const [activeTab, setActiveTab] = useState<Tab>(getTabFromHash);
+  const [activeTab, setActiveTab] = useState<Tab>(() => getRouteInfo().tab);
   const [showInactive, setShowInactive] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -104,7 +139,7 @@ export default function App() {
   const [isMainSidebarCollapsed, setIsMainSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar_collapsed');
     if (saved !== null) return saved === 'true';
-    return getTabFromHash() === 'messages' || getTabFromHash() === 'leads';
+    return getRouteInfo().tab === 'messages' || getRouteInfo().tab === 'leads';
   });
 
   const toggleSidebar = () => {
@@ -276,35 +311,26 @@ export default function App() {
   }, [chatHistory, selectedLeadId]);
 
   useEffect(() => {
+    const tenantBase64 = getTenantBase64FromUrl();
+    const basePath = tenantBase64 ? `/${tenantBase64}/${activeTab}` : `/${activeTab}`;
+
     if (activeTab === 'messages') {
-      // Clear any non-messages query params from the URL
-      if (window.location.search) {
-        const cleanUrl = window.location.pathname + window.location.hash;
-        window.history.replaceState(null, '', cleanUrl);
-      }
-      // Set the hash with session_id if a lead is selected
+      let search = '';
       if (selectedLeadId) {
         const lead = getFilteredLeads().find(l => l.id === selectedLeadId);
         if (lead && lead.session_id) {
-          const newHash = `#messages?session_id=${lead.session_id}`;
-          if (window.location.hash !== newHash) {
-            window.history.replaceState(null, '', window.location.pathname + newHash);
-          }
-        } else {
-          window.history.replaceState(null, '', window.location.pathname + '#messages');
+          search = `?session_id=${lead.session_id}`;
         }
-      } else {
-        window.history.replaceState(null, '', window.location.pathname + '#messages');
       }
+      window.history.replaceState(null, '', basePath + search);
     } else {
-      // Leaving messages tab: restore filter params if they exist, set hash to current tab
       const params = new URLSearchParams();
       if (filterEmpresaId) params.set('empresa', String(filterEmpresaId));
       if (filterAgentId) params.set('agente', String(filterAgentId));
       const search = params.toString() ? `?${params.toString()}` : '';
-      window.history.replaceState(null, '', window.location.pathname + search + `#${activeTab}`);
+      window.history.replaceState(null, '', basePath + search);
     }
-  }, [activeTab, selectedLeadId]);
+  }, [activeTab, selectedLeadId, filterEmpresaId, filterAgentId]);
 
   // Load chat history
   useEffect(() => {
@@ -562,14 +588,21 @@ export default function App() {
     return loadingLd || loadingAg || loadingEmp;
   };
 
+  const navigateToTab = (tab: Tab) => {
+    const tenantBase64 = getTenantBase64FromUrl();
+    const path = tenantBase64 ? `/${tenantBase64}/${tab}` : `/${tab}`;
+    window.history.pushState(null, '', path);
+    setActiveTab(tab);
+  };
+
   // Safe Navigation Handler
   useEffect(() => {
-    const handleHashChange = () => {
-      const tab = getTabFromHash();
+    const handlePopState = () => {
+      const { tab } = getRouteInfo();
       setActiveTab(tab);
     };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   if (!token || !user) {
@@ -578,6 +611,12 @@ export default function App() {
       localStorage.setItem('auth-user', JSON.stringify(newUser));
       setToken(newToken);
       setUser(newUser);
+      
+      const tenantBase64 = getTenantBase64FromUrl();
+      const defaultTab = newUser.role === 'superadmin' ? 'empresas' : 'agents';
+      const path = tenantBase64 ? `/${tenantBase64}/${defaultTab}` : `/${defaultTab}`;
+      window.history.replaceState(null, '', path);
+      setActiveTab(defaultTab);
     }} />;
   }
 
@@ -624,33 +663,33 @@ export default function App() {
           <ul className="menu-list">
             {isSuperAdmin && (
               <li className={`menu-item ${activeTab === 'empresas' ? 'active' : ''}`}>
-                <button onClick={() => setActiveTab('empresas')} title="Empresas">
+                <button onClick={() => navigateToTab('empresas')} title="Empresas">
                   <Building2 size={20} />
                   <span>Empresas</span>
                 </button>
               </li>
             )}
             <li className={`menu-item ${activeTab === 'agents' ? 'active' : ''}`}>
-              <button onClick={() => setActiveTab('agents')} title="Agentes">
+              <button onClick={() => navigateToTab('agents')} title="Agentes">
                 <Users size={20} />
                 <span>Agentes</span>
               </button>
             </li>
             <li className={`menu-item ${activeTab === 'follow-ups' ? 'active' : ''}`}>
-              <button onClick={() => setActiveTab('follow-ups')} title="Follow-ups">
+              <button onClick={() => navigateToTab('follow-ups')} title="Follow-ups">
                 <ClipboardList size={20} />
                 <span>Follow-ups</span>
               </button>
             </li>
             <li className={`menu-item ${activeTab === 'leads' ? 'active' : ''}`}>
-              <button onClick={() => setActiveTab('leads')} title="Leads">
+              <button onClick={() => navigateToTab('leads')} title="Leads">
                 <UserCheck size={20} />
                 <span>Leads</span>
               </button>
             </li>
             {isSuperAdmin && (
               <li className={`menu-item ${activeTab === 'messages' ? 'active' : ''}`}>
-                <button onClick={() => setActiveTab('messages')} title="Histórico de Chat">
+                <button onClick={() => navigateToTab('messages')} title="Histórico de Chat">
                   <MessageSquare size={20} />
                   <span>Histórico de Chat</span>
                 </button>
@@ -658,7 +697,7 @@ export default function App() {
             )}
             {isSuperAdmin && (
               <li className={`menu-item ${activeTab === 'users' ? 'active' : ''}`}>
-                <button onClick={() => setActiveTab('users')} title="Usuários">
+                <button onClick={() => navigateToTab('users')} title="Usuários">
                   <UserCog size={20} />
                   <span>Usuários</span>
                 </button>
@@ -833,7 +872,7 @@ export default function App() {
                 openEditForm={openEditForm}
                 confirmDelete={confirmDelete}
                 setSelectedLeadId={setSelectedLeadId}
-                setActiveTab={setActiveTab}
+                setActiveTab={navigateToTab}
                 isFormOpen={isFormOpen}
                 setIsFormOpen={setIsFormOpen}
                 editingId={editingId}

@@ -14,6 +14,7 @@ import { UserUsecasesImpl } from './domain/usecases/UserUsecasesImpl';
 
 import { MainController } from './adapters/driver/http/controllers/MainController';
 import { setupRoutes } from './adapters/driver/http/routes';
+import { runMigrations } from './db/migrate';
 
 const app = fastify({ logger: true });
 
@@ -51,8 +52,11 @@ setupRoutes(app, controller);
 
 // Start the server
 const start = async () => {
-  const port = Number(process.env.PORT) || 3000;
   try {
+    // Executa as migrações automáticas antes de abrir a porta do servidor
+    await runMigrations();
+
+    const port = Number(process.env.PORT) || 3000;
     await app.listen({ port, host: '0.0.0.0' });
     console.log(`Server is running on port ${port} under Hexagonal & SOLID Architecture`);
   } catch (err) {

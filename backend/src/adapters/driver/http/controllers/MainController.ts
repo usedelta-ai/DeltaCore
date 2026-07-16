@@ -61,6 +61,16 @@ export class MainController {
     }
   }
 
+  async getPublicEmpresa(request: FastifyRequest<{ Params: { base64Id: string } }>, reply: FastifyReply) {
+    const { base64Id } = request.params;
+    try {
+      const data = await this.empresaUsecases.getPublicEmpresa(base64Id);
+      return data;
+    } catch (err: any) {
+      reply.status(404).send({ error: err.message || 'Empresa não encontrada.' });
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // AGENTS
   // ---------------------------------------------------------------------------
@@ -307,9 +317,9 @@ export class MainController {
   // AUTH & USERS
   // ---------------------------------------------------------------------------
   async login(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
-    const { email, password } = request.body as any;
+    const { email, password, empresaId } = request.body as any;
     try {
-      const data = await this.userUsecases.login(email, password);
+      const data = await this.userUsecases.login(email, password, empresaId !== undefined ? Number(empresaId) : undefined);
       return data;
     } catch (err: any) {
       reply.status(401).send({ error: err.message || 'Login failed.' });

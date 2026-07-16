@@ -14,9 +14,14 @@ declare module 'fastify' {
 }
 
 export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
-  // Allow bypassing auth for login route
-  const isLoginRoute = request.routerPath === '/api/auth/login' || request.url === '/api/auth/login' || request.url.includes('/api/auth/login');
-  if (isLoginRoute) {
+  // Allow bypassing auth for login and public company routes
+  const isPublicRoute = 
+    request.routerPath === '/api/auth/login' || 
+    request.url === '/api/auth/login' || 
+    request.url.includes('/api/auth/login') ||
+    request.routerPath === '/api/empresas/public/:base64Id' ||
+    request.url.includes('/api/empresas/public/');
+  if (isPublicRoute) {
     return;
   }
 

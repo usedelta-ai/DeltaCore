@@ -22,6 +22,7 @@ async function setupRoutes(app, controller) {
     app.delete('/api/follow-up-settings/:id', (req, rep) => controller.deleteFollowUpSetting(req, rep));
     // Leads
     app.get('/api/leads', (req, rep) => controller.getLeads(req, rep));
+    app.get('/api/leads/:id', (req, rep) => controller.getLeadById(req, rep));
     app.post('/api/leads', (req, rep) => controller.createLead(req, rep));
     app.put('/api/leads/:id', (req, rep) => controller.updateLead(req, rep));
     app.delete('/api/leads/:id', (req, rep) => controller.deleteLead(req, rep));
@@ -31,6 +32,7 @@ async function setupRoutes(app, controller) {
     app.get('/api/leads/:leadId/agent-history', (req, rep) => controller.getLeadAgentHistory(req, rep));
     app.get('/api/messages/:id/media', (req, rep) => controller.getMessageMedia(req, rep));
     app.post('/api/leads/:leadId/send-message', (req, rep) => controller.sendMessage(req, rep));
+    app.post('/api/leads/:leadId/presence', (req, rep) => controller.sendPresence(req, rep));
     // Evolution API
     app.get('/api/evolution/instances', (req, rep) => controller.getEvolutionInstances(req, rep));
     app.get('/api/evolution/connection-state/:instanceName', (req, rep) => controller.getEvolutionConnectionState(req, rep));

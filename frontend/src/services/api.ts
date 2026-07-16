@@ -120,6 +120,7 @@ export interface HistoryResponse {
 
 export const api = {
   // Empresas
+  getPublicEmpresa: (base64Id: string) => request<Empresa>(`/api/empresas/public/${base64Id}`),
   getEmpresas: () => request<Empresa[]>('/api/empresas'),
   createEmpresa: (data: Partial<Empresa>) => request<Empresa>('/api/empresas', {
     method: 'POST',

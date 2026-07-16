@@ -7,6 +7,7 @@ export async function setupRoutes(app: FastifyInstance, controller: MainControll
   app.addHook('preHandler', authMiddleware);
 
   // Empresas
+  app.get('/api/empresas/public/:base64Id', (req: any, rep) => controller.getPublicEmpresa(req, rep));
   app.get('/api/empresas', (req, rep) => controller.getEmpresas(req, rep));
   app.post('/api/empresas', (req: any, rep) => controller.createEmpresa(req, rep));
   app.put('/api/empresas/:id', (req: any, rep) => controller.updateEmpresa(req, rep));

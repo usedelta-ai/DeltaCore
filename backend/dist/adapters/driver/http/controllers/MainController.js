@@ -159,6 +159,18 @@ class MainController {
             reply.status(500).send({ error: err.message || 'Failed to fetch leads.' });
         }
     }
+    async getLeadById(request, reply) {
+        const id = parseInt(request.params.id, 10);
+        try {
+            const data = await this.leadUsecases.getLeadById(request.user, id);
+            if (!data)
+                return reply.status(404).send({ error: 'Lead not found' });
+            return data;
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to fetch lead.' });
+        }
+    }
     async createLead(request, reply) {
         try {
             const data = await this.leadUsecases.createLead(request.user, request.body);
@@ -240,6 +252,17 @@ class MainController {
         }
         catch (err) {
             reply.status(500).send({ error: err.message || 'Failed to send message.' });
+        }
+    }
+    async sendPresence(request, reply) {
+        const leadId = parseInt(request.params.leadId, 10);
+        const { presence } = request.body;
+        try {
+            await this.chatUsecases.sendPresence(request.user, leadId, presence);
+            return { success: true };
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to send presence.' });
         }
     }
     // ---------------------------------------------------------------------------

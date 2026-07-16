@@ -713,36 +713,6 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     }
   };
 
-  const renderCustomPropertiesGrid = (ld: Lead) => {
-    const agent = agents.find(a => a.id === ld.agent_id);
-    let translations: Record<string, string> = {};
-    if (agent && agent.translations) {
-      try {
-        translations = typeof agent.translations === 'string' ? JSON.parse(agent.translations) : agent.translations;
-      } catch (_) {}
-    }
-
-    const props = ld.custom_properties;
-    if (!props || typeof props !== 'object' || Object.keys(props).length === 0) return null;
-
-    return (
-      <div className="meta-grid">
-        {Object.entries(props).map(([key, val]) => {
-          const isSummary = key === 'conversation_summary';
-          return (
-            <div key={key} className={`meta-item ${isSummary ? 'conversation-summary' : ''}`}>
-              <span className="meta-label">
-                {formatKey(key, translations)}
-              </span>
-              <span className="meta-value">
-                {formatValue(key, val, translations)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
 
   // Drag and Drop Handlers
   const handleDragStart = (e: React.DragEvent, id: number) => {
@@ -966,9 +936,6 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                               <div className="taken-motive-text">{ld.taken_motive}</div>
                             </div>
                           )}
-
-                          {/* Render meta-grid properties */}
-                          {renderCustomPropertiesGrid(ld)}
 
                           <div className="lead-footer">
                             <div className="lead-footer-row">

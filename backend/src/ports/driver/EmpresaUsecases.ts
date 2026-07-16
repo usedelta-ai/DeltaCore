@@ -6,4 +6,5 @@ export interface EmpresaUsecases {
   createEmpresa(user: UserSession, name: string, logo: string | null): Promise<Empresa>;
   updateEmpresa(user: UserSession, id: number, name: string, logo?: string | null): Promise<Empresa>;
   deleteEmpresa(user: UserSession, id: number): Promise<boolean>;
+  getPublicEmpresa(base64Id: string): Promise<Empresa>;
 }

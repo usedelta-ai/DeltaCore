@@ -17,6 +17,7 @@ const EvolutionUsecasesImpl_1 = require("./domain/usecases/EvolutionUsecasesImpl
 const UserUsecasesImpl_1 = require("./domain/usecases/UserUsecasesImpl");
 const MainController_1 = require("./adapters/driver/http/controllers/MainController");
 const routes_1 = require("./adapters/driver/http/routes");
+const migrate_1 = require("./db/migrate");
 const app = (0, fastify_1.default)({ logger: true });
 // Enable CORS
 app.register(cors_1.default, {
@@ -39,8 +40,10 @@ const controller = new MainController_1.MainController(empresaUsecases, agentUse
 (0, routes_1.setupRoutes)(app, controller);
 // Start the server
 const start = async () => {
-    const port = Number(process.env.PORT) || 3000;
     try {
+        // Executa as migrações automáticas antes de abrir a porta do servidor
+        await (0, migrate_1.runMigrations)();
+        const port = Number(process.env.PORT) || 3000;
         await app.listen({ port, host: '0.0.0.0' });
         console.log(`Server is running on port ${port} under Hexagonal & SOLID Architecture`);
     }

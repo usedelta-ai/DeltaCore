@@ -77,10 +77,14 @@ export class UserUsecasesImpl implements UserUsecases {
     return this.db.deleteUser(id);
   }
 
-  async login(email: string, password: string): Promise<{ token: string; user: { id: number; name: string; email: string; role: string; empresa_id?: number | null; empresa_name?: string | null; empresa_logo?: string | null } }> {
+  async login(email: string, password: string, empresaId?: number): Promise<{ token: string; user: { id: number; name: string; email: string; role: string; empresa_id?: number | null; empresa_name?: string | null; empresa_logo?: string | null } }> {
     const user = await this.db.getUserByEmail(email);
     if (!user || !this.verifyPassword(password, user.password)) {
       throw new Error('Invalid email or password');
+    }
+
+    if (empresaId !== undefined && user.role !== 'superadmin' && user.empresa_id !== empresaId) {
+      throw new Error('Acesso não autorizado para esta empresa');
     }
 
     let empresaName: string | null = null;

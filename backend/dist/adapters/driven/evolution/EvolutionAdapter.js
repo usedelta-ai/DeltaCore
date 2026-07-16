@@ -102,5 +102,16 @@ class EvolutionAdapter {
             body: JSON.stringify(body)
         });
     }
+    async sendPresence(instanceName, number, presence) {
+        const delay = presence === 'recording' ? 20000 : 10000;
+        return evolutionRequest(`/chat/sendPresence/${instanceName}`, {
+            method: 'POST',
+            body: JSON.stringify({
+                number,
+                delay,
+                presence
+            })
+        });
+    }
 }
 exports.EvolutionAdapter = EvolutionAdapter;

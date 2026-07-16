@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pencil, Trash2, Image } from 'lucide-react';
+import React, { useState } from 'react';
+import { Pencil, Trash2, Image, Copy, Check } from 'lucide-react';
 import type { Empresa } from '../services/api';
 import { getBoardUrl } from '../services/api';
 import { ConfirmationModal } from '../components/Modal';
@@ -48,46 +48,211 @@ export const EmpresasPage: React.FC<EmpresasPageProps> = ({
   handleDelete,
   setDeleteModal,
 }) => {
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  const handleCopyLink = (id: number) => {
+    const base64Id = btoa(String(id));
+    const url = `${window.location.origin}/${base64Id}/login`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  };
+
   const visibleEmpresas = showInactive
     ? empresas.filter(e => !e.active)
     : empresas.filter(e => e.active);
 
   return (
     <>
-      <div className="dashboard-grid">
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+        gap: '24px',
+        padding: '8px 0 24px 0'
+      }}>
         {visibleEmpresas.map(emp => (
-          <div key={emp.id} className="card" style={!emp.active ? { opacity: 0.6 } : {}}>
-            <div className="card-header">
-              {emp.logo ? (
-                <img src={`data:image/png;base64,${emp.logo}`} alt={emp.name} className="company-logo" />
-              ) : (
-                <div className="company-logo-placeholder">{emp.name.charAt(0).toUpperCase()}</div>
-              )}
-              <span className={`badge ${emp.active ? 'badge-success' : 'badge-danger'}`}>
-                {emp.active ? 'Ativa' : 'Inativa'}
-              </span>
+          <div 
+            key={emp.id} 
+            className="card" 
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              borderRadius: '20px',
+              border: '1px solid hsla(var(--card-border) / 0.6)',
+              background: 'linear-gradient(135deg, hsl(var(--card)) 0%, hsla(var(--card) / 0.9) 100%)',
+              padding: '24px',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+              opacity: emp.active ? 1 : 0.7,
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(0, 0, 0, 0.12)';
+              e.currentTarget.style.borderColor = 'hsla(var(--primary) / 0.4)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 20px -2px rgba(0, 0, 0, 0.05)';
+              e.currentTarget.style.borderColor = 'hsla(var(--card-border) / 0.6)';
+            }}
+          >
+            {/* Top Info Header */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                {emp.logo ? (
+                  <img 
+                    src={`data:image/png;base64,${emp.logo}`} 
+                    alt={emp.name} 
+                    style={{
+                      width: '64px',
+                      height: '64px',
+                      borderRadius: '16px',
+                      objectFit: 'cover',
+                      border: '1px solid hsla(var(--card-border) / 0.8)',
+                      boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.08)'
+                    }} 
+                  />
+                ) : (
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '16px',
+                    background: 'linear-gradient(135deg, hsla(262, 83%, 58%, 0.15) 0%, hsla(262, 83%, 58%, 0.05) 100%)',
+                    color: 'hsl(var(--primary))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '24px',
+                    fontWeight: 700,
+                    border: '1px solid hsla(var(--primary) / 0.15)'
+                  }}>
+                    {emp.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span style={{
+                  padding: '6px 14px',
+                  borderRadius: '9999px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  backgroundColor: emp.active ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                  color: emp.active ? '#10b981' : '#ef4444',
+                  border: emp.active ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid rgba(239, 68, 68, 0.15)'
+                }}>
+                  {emp.active ? 'Ativa' : 'Inativa'}
+                </span>
+              </div>
+
+              <h3 style={{
+                fontSize: '18px',
+                fontWeight: 700,
+                color: 'hsl(var(--foreground))',
+                margin: '0 0 6px 0',
+                letterSpacing: '-0.5px',
+                lineHeight: '1.3'
+              }}>
+                {emp.name}
+              </h3>
+              
+              <div style={{
+                fontSize: '12px',
+                color: 'hsl(var(--muted-foreground))',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                marginBottom: '24px'
+              }}>
+                <span>Registrada em:</span>
+                <strong style={{ color: 'hsl(var(--foreground))', fontWeight: 500 }}>
+                  {new Date(emp.created_at).toLocaleDateString()}
+                </strong>
+              </div>
             </div>
-            <div className="card-body">
-              <h3 className="card-title">{emp.name}</h3>
-              <span style={{ fontSize: '12px', marginTop: '8px' }}>
-                Criado em: {new Date(emp.created_at).toLocaleDateString()}
-              </span>
-            </div>
-            <div className="card-footer">
+
+            {/* Footer Actions */}
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '10px',
+              borderTop: '1px solid hsla(var(--card-border) / 0.5)',
+              paddingTop: '16px',
+              marginTop: 'auto'
+            }}>
               {emp.active && (
                 <>
-                  <a href={getBoardUrl(emp.id, emp.name)} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm" style={{ textDecoration: 'none' }}>
+                  <a 
+                    href={getBoardUrl(emp.id, emp.name)} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="btn btn-primary btn-sm" 
+                    style={{
+                      textDecoration: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      borderRadius: '10px',
+                      fontWeight: 600,
+                      boxShadow: '0 4px 12px -2px hsla(262, 83%, 58%, 0.2)'
+                    }}
+                  >
                     🔗 Board
                   </a>
+                  <button 
+                    className="btn btn-secondary btn-sm" 
+                    onClick={() => handleCopyLink(emp.id)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 14px',
+                      borderRadius: '10px',
+                      fontWeight: 600,
+                      backgroundColor: 'hsl(var(--secondary))',
+                      border: '1px solid hsla(var(--card-border) / 0.6)'
+                    }}
+                  >
+                    {copiedId === emp.id ? <Check size={13} style={{ color: '#10b981' }} /> : <Copy size={13} />}
+                    {copiedId === emp.id ? 'Copiado!' : 'Copiar Login'}
+                  </button>
                   {hasWritePermission && (
-                    <>
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(emp)}>
-                        <Pencil size={12} /> Editar
+                    <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+                      <button 
+                        className="btn btn-ghost btn-sm" 
+                        onClick={() => openEditForm(emp)}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'hsl(var(--muted-foreground))'
+                        }}
+                        title="Editar Empresa"
+                      >
+                        <Pencil size={14} />
                       </button>
-                      <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(emp.id, emp.name)}>
-                        <Trash2 size={12} /> Inativar
+                      <button 
+                        className="btn btn-ghost btn-sm" 
+                        onClick={() => confirmDelete(emp.id, emp.name)}
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ef4444'
+                        }}
+                        title="Inativar Empresa"
+                      >
+                        <Trash2 size={14} />
                       </button>
-                    </>
+                    </div>
                   )}
                 </>
               )}

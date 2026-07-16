@@ -307,6 +307,20 @@ class ChatUsecasesImpl {
             throw new Error('Agent has no instance configured');
         return this.evolution.getBase64FromMediaMessage(instanceName, message.message_id);
     }
+    async sendPresence(user, leadId, presence) {
+        const lead = await this.db.getLeadById(leadId);
+        if (!lead)
+            throw new Error('Lead not found');
+        await this.checkCompanyAccessByAgent(user, lead.agent_id);
+        const agent = await this.db.getAgentById(lead.agent_id);
+        if (!agent)
+            throw new Error('Agent not found for this lead');
+        const instanceName = agent.instance_name;
+        if (!instanceName)
+            throw new Error('Agent has no Evolution API instance configured');
+        const cleanNumber = lead.remote_jid_alt.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+        await this.evolution.sendPresence(instanceName, cleanNumber, presence);
+    }
     async sendMessage(user, leadId, content, options) {
         const lead = await this.db.getLeadById(leadId);
         if (!lead)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { KeyRound, Mail, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
@@ -13,13 +13,73 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [companyId, setCompanyId] = useState<number | null>(null);
+  const [loadingCompany, setLoadingCompany] = useState(false);
+
+  useEffect(() => {
+    // Extract tenant parameter from pathname, hash or query params
+    const getTenantFromUrl = (): string | null => {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      if (parts.length > 0) {
+        const first = parts[0];
+        try {
+          const dec = atob(first);
+          if (/^\d+$/.test(dec)) return first;
+        } catch (_) {}
+      }
+
+      // Fallback to query param
+      const params = new URLSearchParams(window.location.search);
+      const queryTenant = params.get('tenant') || params.get('company') || params.get('id');
+      if (queryTenant) {
+        return queryTenant;
+      }
+
+      // Fallback to hash
+      let hash = window.location.hash.replace(/^#\/?/, '');
+      if (hash.startsWith('login/')) {
+        hash = hash.substring(6);
+      }
+      if (hash && hash.length > 2) {
+        try {
+          const dec = atob(hash);
+          if (/^\d+$/.test(dec)) return hash;
+        } catch (_) {}
+      }
+
+      return null;
+    };
+
+    const base64Id = getTenantFromUrl();
+    if (base64Id) {
+      setLoadingCompany(true);
+      api.getPublicEmpresa(base64Id)
+        .then((empresa) => {
+          if (empresa && empresa.id) {
+            setCompanyId(empresa.id);
+            setCompanyName(empresa.name);
+            setCompanyLogo(empresa.logo);
+          }
+        })
+        .catch((err) => {
+          console.error('Error fetching public empresa:', err);
+          setError('Empresa não encontrada ou inativa');
+        })
+        .finally(() => {
+          setLoadingCompany(false);
+        });
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      const res = await api.login({ email, password });
+      const res = await api.login({ email, password, empresaId: companyId || undefined });
       if (res && res.token && res.user) {
         onLoginSuccess(res.token, res.user);
       } else {
@@ -57,12 +117,68 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         gap: '24px'
       }}>
         {/* Header */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', textAlign: 'center' }}>
-          <img src="/logo.jpg" alt="DeltaAI Logo" style={{ width: '64px', height: '64px', borderRadius: '16px', objectFit: 'cover', boxShadow: '0 8px 20px -6px hsla(262, 83%, 58%, 0.3)' }} />
-          <div>
-            <h2 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.5px' }}>DeltaAI Admin</h2>
-            <p style={{ fontSize: '13px', color: 'hsl(var(--muted-foreground))', marginTop: '4px' }}>Entre para acessar sua conta</p>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', textAlign: 'center', width: '100%' }}>
+          <style>{`
+            @keyframes shimmer {
+              0% { background-position: -200% 0; }
+              100% { background-position: 200% 0; }
+            }
+          `}</style>
+          {loadingCompany ? (
+            <>
+              {/* Skeleton logo */}
+              <div 
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '16px',
+                  background: 'linear-gradient(90deg, hsl(var(--card-border)) 25%, hsl(var(--card)) 50%, hsl(var(--card-border)) 75%)',
+                  backgroundSize: '200% 100%',
+                  animation: 'shimmer 1.5s infinite',
+                  boxShadow: '0 8px 20px -6px rgba(0, 0, 0, 0.05)'
+                }}
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', width: '100%' }}>
+                {/* Skeleton title */}
+                <div 
+                  style={{
+                    width: '160px',
+                    height: '24px',
+                    borderRadius: '4px',
+                    background: 'linear-gradient(90deg, hsl(var(--card-border)) 25%, hsl(var(--card)) 50%, hsl(var(--card-border)) 75%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 1.5s infinite'
+                  }}
+                />
+                {/* Skeleton subtitle */}
+                <div 
+                  style={{
+                    width: '220px',
+                    height: '14px',
+                    borderRadius: '4px',
+                    background: 'linear-gradient(90deg, hsl(var(--card-border)) 25%, hsl(var(--card)) 50%, hsl(var(--card-border)) 75%)',
+                    backgroundSize: '200% 100%',
+                    animation: 'shimmer 1.5s infinite',
+                    marginTop: '4px'
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              {companyLogo ? (
+                <img src={`data:image/png;base64,${companyLogo}`} alt={companyName || "Company Logo"} style={{ width: '64px', height: '64px', borderRadius: '16px', objectFit: 'cover', boxShadow: '0 8px 20px -6px hsla(262, 83%, 58%, 0.3)' }} />
+              ) : (
+                <img src="/logo.jpg" alt="DeltaAI Logo" style={{ width: '64px', height: '64px', borderRadius: '16px', objectFit: 'cover', boxShadow: '0 8px 20px -6px hsla(262, 83%, 58%, 0.3)' }} />
+              )}
+              <div>
+                <h2 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.5px' }}>{companyName ? companyName : "DeltaAI Admin"}</h2>
+                <p style={{ fontSize: '13px', color: 'hsl(var(--muted-foreground))', marginTop: '4px' }}>
+                  {companyName ? `Acesso restrito para ${companyName}` : "Entre para acessar sua conta"}
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Error Alert */}
