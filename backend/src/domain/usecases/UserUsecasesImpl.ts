@@ -89,9 +89,10 @@ export class UserUsecasesImpl implements UserUsecases {
 
     let empresaName: string | null = null;
     let empresaLogo: string | null = null;
+    const activeEmpresaId = user.empresa_id || empresaId;
 
-    if (user.empresa_id) {
-      const empresas = await this.db.getEmpresas(user.empresa_id);
+    if (activeEmpresaId) {
+      const empresas = await this.db.getEmpresas(activeEmpresaId);
       if (empresas && empresas.length > 0) {
         empresaName = empresas[0].name;
         empresaLogo = empresas[0].logo || null;
@@ -101,7 +102,7 @@ export class UserUsecasesImpl implements UserUsecases {
     const payload = {
       userId: user.id,
       role: user.role,
-      companyId: user.empresa_id,
+      companyId: activeEmpresaId,
       exp: Date.now() + 1000 * 60 * 60 * 24 // 24 hours
     };
 
@@ -113,7 +114,7 @@ export class UserUsecasesImpl implements UserUsecases {
         name: user.name,
         email: user.email,
         role: user.role as any,
-        empresa_id: user.empresa_id,
+        empresa_id: activeEmpresaId,
         empresa_name: empresaName,
         empresa_logo: empresaLogo
       }

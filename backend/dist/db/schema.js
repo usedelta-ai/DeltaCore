@@ -85,6 +85,7 @@ exports.messages = (0, pg_core_1.pgTable)('messages', {
     message_type: (0, pg_core_1.varchar)('message_type', { length: 50 }).notNull(),
     message_id: (0, pg_core_1.varchar)('message_id', { length: 255 }).notNull(),
     quote_message_content: (0, pg_core_1.text)('quote_message_content'),
+    user_id: (0, pg_core_1.integer)('user_id').references(() => exports.users.id, { onDelete: 'set null' }),
     created_at: (0, pg_core_1.timestamp)('created_at', { withTimezone: true }).defaultNow(),
 });
 // 7. Tabela Lead History (Nova)

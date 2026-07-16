@@ -405,6 +405,7 @@ export class PostgresAdapter implements DBPort {
     message_type: string;
     message_id: string;
     quote_message_content?: string;
+    user_id?: number;
   }): Promise<any> {
     const res = await db.insert(schema.messages)
       .values({
@@ -417,6 +418,7 @@ export class PostgresAdapter implements DBPort {
         message_type: message.message_type,
         message_id: message.message_id,
         quote_message_content: message.quote_message_content || null,
+        user_id: message.user_id ?? null,
       })
       .returning();
     const row = res[0];
@@ -496,5 +498,49 @@ export class PostgresAdapter implements DBPort {
       .where(eq(schema.users.id, id))
       .returning();
     return res.length > 0;
+  }
+
+  async getLeadHistoryChanges(leadId: number): Promise<any[]> {
+    const res = await db.select({
+      id: schema.lead_history.id,
+      lead_id: schema.lead_history.lead_id,
+      user_id: schema.lead_history.user_id,
+      agent_id: schema.lead_history.agent_id,
+      changed_by_agent: schema.lead_history.changed_by_agent,
+      field_name: schema.lead_history.field_name,
+      old_value: schema.lead_history.old_value,
+      new_value: schema.lead_history.new_value,
+      created_at: schema.lead_history.created_at,
+      user_name: schema.users.name,
+      agent_name: schema.agents.name
+    })
+    .from(schema.lead_history)
+    .leftJoin(schema.users, eq(schema.lead_history.user_id, schema.users.id))
+    .leftJoin(schema.agents, eq(schema.lead_history.agent_id, schema.agents.id))
+    .where(eq(schema.lead_history.lead_id, leadId))
+    .orderBy(asc(schema.lead_history.created_at));
+
+    return res;
+  }
+
+  async insertLeadHistoryLog(log: {
+    lead_id: number;
+    user_id?: number | null;
+    agent_id?: number | null;
+    changed_by_agent: boolean;
+    field_name: string;
+    old_value: string | null;
+    new_value: string | null;
+  }): Promise<void> {
+    await db.insert(schema.lead_history)
+      .values({
+        lead_id: log.lead_id,
+        user_id: log.user_id ?? null,
+        agent_id: log.agent_id ?? null,
+        changed_by_agent: log.changed_by_agent,
+        field_name: log.field_name,
+        old_value: log.old_value,
+        new_value: log.new_value
+      });
   }
 }

@@ -1,12 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Building2, Users, ClipboardList,
-  MessageSquare, Plus, AlertCircle, UserCheck, Menu, UserCog
-} from 'lucide-react';
 import { api } from './services/api';
 import type { Agent, ChatMessage, Lead, LeadStatus } from './services/api';
-import { SkeletonView } from './components/ui/SkeletonView';
 import { LoginScreen } from './components/features/LoginScreen';
+import { TopAppBar } from './components/layout/TopAppBar';
 
 import { useEmpresas } from './hooks/useEmpresas';
 import { useAgents } from './hooks/useAgents';
@@ -17,11 +13,15 @@ import { useFollowUps } from './hooks/useFollowUps';
 import { EmpresasPage } from './pages/EmpresasPage';
 import { AgentsPage } from './pages/AgentsPage';
 import { FollowUpsPage } from './pages/FollowUpsPage';
-import { LeadsPage } from './pages/LeadsPage';
 import { MessagesPage } from './pages/MessagesPage';
 import { UsersPage } from './pages/UsersPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { ImmersiveLeadView } from './pages/ImmersiveLeadView';
 
-type Tab = 'empresas' | 'agents' | 'follow-ups' | 'leads' | 'messages' | 'users';
+// Layout
+import { SideNavBar } from './components/layout/SideNavBar';
+
+export type Tab = 'empresas' | 'agents' | 'follow-ups' | 'leads' | 'messages' | 'users';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('auth-token'));
@@ -46,12 +46,14 @@ export default function App() {
     return null;
   };
 
-  const getRouteInfo = (): { tenantBase64: string | null; tab: Tab } => {
+  const getRouteInfo = (): { tenantBase64: string | null; tab: Tab; leadId: number | null } => {
     const pathname = window.location.pathname;
     const parts = pathname.split('/').filter(Boolean);
     let tenantBase64: string | null = null;
     let tabStr = '';
+    let leadId: number | null = null;
     
+    let partsOffset = 0;
     if (parts.length > 0) {
       const first = parts[0];
       let isTenant = false;
@@ -64,10 +66,14 @@ export default function App() {
       
       if (isTenant) {
         tenantBase64 = first;
-        tabStr = parts[1] || '';
-      } else {
-        tabStr = parts[0] || '';
+        partsOffset = 1;
       }
+    }
+    
+    tabStr = parts[partsOffset] || '';
+    const possibleLeadId = parts[partsOffset + 1];
+    if (possibleLeadId && /^\d+$/.test(possibleLeadId)) {
+      leadId = Number(possibleLeadId);
     }
     
     const validTabs: Tab[] = ['empresas', 'agents', 'follow-ups', 'leads', 'messages', 'users'];
@@ -76,7 +82,7 @@ export default function App() {
       tab = tabStr as Tab;
     }
     
-    return { tenantBase64, tab };
+    return { tenantBase64, tab, leadId };
   };
 
   const [filterEmpresaId, setFilterEmpresaId] = useState<number | string>(() => {
@@ -91,21 +97,25 @@ export default function App() {
     return params.get('agente') || '';
   });
 
-  const { empresas, loading: loadingEmp, createEmpresa, updateEmpresa, deleteEmpresa } = useEmpresas(token);
-  const { agents, loading: loadingAg, createAgent, updateAgent, deleteAgent } = useAgents(token);
-  const { leads, loading: loadingLd, createLead, updateLead, deleteLead, refetch: refetchLeads } = useLeads(token, filterEmpresaId, filterAgentId);
-  const { followUps, loading: loadingFl, createFollowUp, updateFollowUp, deleteFollowUp } = useFollowUps(token);
+  const { empresas, createEmpresa, updateEmpresa, deleteEmpresa } = useEmpresas(token);
+  const { agents, createAgent, updateAgent, deleteAgent } = useAgents(token);
+  const { leads, createLead, updateLead, deleteLead, refetch: refetchLeads } = useLeads(token, filterEmpresaId, filterAgentId);
+  const { followUps, createFollowUp, updateFollowUp, deleteFollowUp } = useFollowUps(token);
 
   const currentCompany = companyId ? empresas.find(e => e.id === companyId) : null;
-  const systemName = currentCompany ? currentCompany.name : (user?.empresa_name || 'DeltaAI Admin');
-  const systemLogo = currentCompany ? currentCompany.logo : (user?.empresa_logo || null);
+  const [customLogo, setCustomLogo] = useState<string | null>(null);
+  const systemName = currentCompany?.name || user?.empresa_name || 'DeltaAI Admin';
+  const systemLogoRaw = currentCompany?.logo || user?.empresa_logo || customLogo || null;
+  const systemLogo = systemLogoRaw
+    ? (systemLogoRaw.startsWith('data:') ? systemLogoRaw : `data:image/png;base64,${systemLogoRaw}`)
+    : null;
 
   const [activeTab, setActiveTab] = useState<Tab>(() => getRouteInfo().tab);
-  const [showInactive, setShowInactive] = useState(false);
+  const [showInactive, _setShowInactive] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [_error, setError] = useState<string | null>(null);
 
   // Forms fields
   const [empresaName, setEmpresaName] = useState('');
@@ -142,13 +152,23 @@ export default function App() {
     return getRouteInfo().tab === 'messages' || getRouteInfo().tab === 'leads';
   });
 
-  const toggleSidebar = () => {
-    const nextVal = !isMainSidebarCollapsed;
-    setIsMainSidebarCollapsed(nextVal);
-    localStorage.setItem('sidebar_collapsed', String(nextVal));
-  };
+  const [leadViewMode, setLeadViewMode] = useState<'dashboard' | 'immersive' | null>(() => {
+    return getRouteInfo().leadId ? 'immersive' : null;
+  });
+  const [selectedImmersiveLeadId, setSelectedImmersiveLeadId] = useState<number | null>(() => getRouteInfo().leadId);
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Fetch empresa logo when user has empresa_id but no logo found
+  useEffect(() => {
+    if (!token || !user?.empresa_id || systemLogo) return;
+    const base64Id = btoa(String(user.empresa_id));
+    api.getPublicEmpresa(base64Id)
+      .then(emp => {
+        if (emp?.logo) setCustomLogo(emp.logo);
+      })
+      .catch(() => {});
+  }, [token, user?.empresa_id, systemLogo]);
 
   const [evolutionInstances, setEvolutionInstances] = useState<any[]>([]);
   const [qrModal, setQrModal] = useState<{
@@ -296,13 +316,15 @@ export default function App() {
     }));
   };
 
+  const isFirstMount = useRef(true);
+
   useEffect(() => {
-    if (activeTab === 'messages' || activeTab === 'leads') {
-      setIsMainSidebarCollapsed(true);
-    } else {
-      setIsMainSidebarCollapsed(false);
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
     }
-  }, [activeTab]);
+    setIsMainSidebarCollapsed(true);
+  }, [activeTab, leadViewMode]);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -312,7 +334,11 @@ export default function App() {
 
   useEffect(() => {
     const tenantBase64 = getTenantBase64FromUrl();
-    const basePath = tenantBase64 ? `/${tenantBase64}/${activeTab}` : `/${activeTab}`;
+    let basePath = tenantBase64 ? `/${tenantBase64}/${activeTab}` : `/${activeTab}`;
+
+    if (activeTab === 'leads' && leadViewMode === 'immersive' && selectedImmersiveLeadId) {
+      basePath += `/${selectedImmersiveLeadId}`;
+    }
 
     if (activeTab === 'messages') {
       let search = '';
@@ -330,7 +356,7 @@ export default function App() {
       const search = params.toString() ? `?${params.toString()}` : '';
       window.history.replaceState(null, '', basePath + search);
     }
-  }, [activeTab, selectedLeadId, filterEmpresaId, filterAgentId]);
+  }, [activeTab, selectedLeadId, filterEmpresaId, filterAgentId, leadViewMode, selectedImmersiveLeadId]);
 
   // Load chat history
   useEffect(() => {
@@ -579,13 +605,28 @@ export default function App() {
     }
   };
 
-  const isLoadingTab = () => {
-    if (activeTab === 'empresas') return loadingEmp;
-    if (activeTab === 'agents') return loadingAg || loadingEmp;
-    if (activeTab === 'follow-ups') return loadingFl || loadingAg;
-    if (activeTab === 'leads') return loadingLd || loadingAg || loadingFl;
-    if (activeTab === 'messages') return false;
-    return loadingLd || loadingAg || loadingEmp;
+
+  const handleLeadClick = (leadId: number) => {
+    setSelectedImmersiveLeadId(leadId);
+    setLeadViewMode('immersive');
+  };
+
+  const handleBackFromImmersive = () => {
+    setLeadViewMode('dashboard');
+    setSelectedImmersiveLeadId(null);
+    refetchLeads();
+  };
+
+  const handleNewLead = () => {
+    setLeadViewMode('dashboard');
+    openCreateForm();
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth-token');
+    localStorage.removeItem('auth-user');
+    setToken(null);
+    setUser(null);
   };
 
   const navigateToTab = (tab: Tab) => {
@@ -593,6 +634,12 @@ export default function App() {
     const path = tenantBase64 ? `/${tenantBase64}/${tab}` : `/${tab}`;
     window.history.pushState(null, '', path);
     setActiveTab(tab);
+    if (tab === 'leads') {
+      setLeadViewMode('dashboard');
+    } else {
+      setLeadViewMode(null);
+    }
+    setSelectedImmersiveLeadId(null);
   };
 
   // Safe Navigation Handler
@@ -620,304 +667,161 @@ export default function App() {
     }} />;
   }
 
+  if (leadViewMode === 'immersive') {
+    return (
+      <ImmersiveLeadView
+        leadId={selectedImmersiveLeadId ?? undefined}
+        onBack={handleBackFromImmersive}
+        systemLogo={systemLogo}
+        userName={user?.name}
+        isSuperAdmin={isSuperAdmin}
+        systemName={systemName}
+        onTabChange={navigateToTab}
+        onLogout={handleLogout}
+        isSidebarCollapsed={isMainSidebarCollapsed}
+        onToggleSidebarCollapse={() => {
+          const next = !isMainSidebarCollapsed;
+          setIsMainSidebarCollapsed(next);
+          localStorage.setItem('sidebar_collapsed', String(next));
+        }}
+        hasWritePermission={hasWritePermission}
+      />
+    );
+  }
+
   return (
-    <div className="app-container">
-      {/* SIDEBAR */}
-      <aside className={`sidebar ${isMainSidebarCollapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: isMainSidebarCollapsed ? 'center' : 'space-between', width: '100%' }}>
-          {!isMainSidebarCollapsed ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {systemLogo ? (
-                <img src={`data:image/png;base64,${systemLogo}`} alt={systemName} style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <img src="/logo.jpg" alt="Delta Logo" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
-              )}
-              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '170px' }}>{systemName}</span>
-            </div>
-          ) : (
-            systemLogo ? (
-              <img src={`data:image/png;base64,${systemLogo}`} alt={systemName} style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
-            ) : (
-              <img src="/logo.jpg" alt="Delta Logo" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }} />
-            )
-          )}
-          <button
-            onClick={toggleSidebar}
-            style={{
-              color: 'hsl(var(--muted-foreground))',
-              padding: '6px',
-              borderRadius: '6px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              border: 'none',
-              background: 'transparent'
-            }}
-            title={isMainSidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-          >
-            <Menu size={20} />
-          </button>
-        </div>
-        <nav>
-          <ul className="menu-list">
-            {isSuperAdmin && (
-              <li className={`menu-item ${activeTab === 'empresas' ? 'active' : ''}`}>
-                <button onClick={() => navigateToTab('empresas')} title="Empresas">
-                  <Building2 size={20} />
-                  <span>Empresas</span>
-                </button>
-              </li>
-            )}
-            <li className={`menu-item ${activeTab === 'agents' ? 'active' : ''}`}>
-              <button onClick={() => navigateToTab('agents')} title="Agentes">
-                <Users size={20} />
-                <span>Agentes</span>
-              </button>
-            </li>
-            <li className={`menu-item ${activeTab === 'follow-ups' ? 'active' : ''}`}>
-              <button onClick={() => navigateToTab('follow-ups')} title="Follow-ups">
-                <ClipboardList size={20} />
-                <span>Follow-ups</span>
-              </button>
-            </li>
-            <li className={`menu-item ${activeTab === 'leads' ? 'active' : ''}`}>
-              <button onClick={() => navigateToTab('leads')} title="Leads">
-                <UserCheck size={20} />
-                <span>Leads</span>
-              </button>
-            </li>
-            {isSuperAdmin && (
-              <li className={`menu-item ${activeTab === 'messages' ? 'active' : ''}`}>
-                <button onClick={() => navigateToTab('messages')} title="Histórico de Chat">
-                  <MessageSquare size={20} />
-                  <span>Histórico de Chat</span>
-                </button>
-              </li>
-            )}
-            {isSuperAdmin && (
-              <li className={`menu-item ${activeTab === 'users' ? 'active' : ''}`}>
-                <button onClick={() => navigateToTab('users')} title="Usuários">
-                  <UserCog size={20} />
-                  <span>Usuários</span>
-                </button>
-              </li>
-            )}
-          </ul>
-        </nav>
-      </aside>
-
-      {/* MAIN CONTAINER */}
-      <main className={`main-content ${isMainSidebarCollapsed ? 'full-width' : ''}`}>
-        <div className="page-header" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-          <div className="page-title">
-            <h1>
-              {activeTab === 'empresas' && 'Empresas'}
-              {activeTab === 'agents' && 'Agentes'}
-              {activeTab === 'follow-ups' && 'Configurações de Follow-up'}
-              {activeTab === 'leads' && 'Leads'}
-              {activeTab === 'messages' && 'Histórico de Chat / Mensagens'}
-              {activeTab === 'users' && 'Gerenciamento de Usuários'}
-            </h1>
-          </div>
-          
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginLeft: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'hsl(var(--card))', border: '1px solid hsl(var(--card-border))', borderRadius: '24px', padding: '6px 16px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>
-                Olá, <strong style={{ color: 'hsl(var(--primary))' }}>{user?.name}</strong> ({user?.role === 'superadmin' ? '🛡️ Super Admin' : user?.role === 'manager' ? '💼 Gerente' : '🧑‍💻 Funcionário'})
-              </span>
-              <button 
-                className="btn btn-secondary btn-sm" 
-                style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '16px' }}
-                onClick={() => {
-                  localStorage.removeItem('auth-token');
-                  localStorage.removeItem('auth-user');
-                  window.location.reload();
-                }}
-              >
-                Sair
-              </button>
-            </div>
-
-            {(activeTab === 'empresas' || activeTab === 'agents') && (
-              <button
-                className={`btn btn-sm ${showInactive ? 'btn-secondary' : 'btn-ghost'}`}
-                onClick={() => setShowInactive(v => !v)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  fontSize: '13px',
-                  opacity: showInactive ? 1 : 0.7,
-                  border: showInactive ? '1px solid hsl(var(--primary) / 0.5)' : '1px solid hsl(var(--card-border))'
-                }}
-              >
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: showInactive ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))', display: 'inline-block' }} />
-                {showInactive ? 'Ocultando ativos' : 'Mostrar inativos'}
-              </button>
-            )}
-            {activeTab !== 'messages' && activeTab !== 'users' && (activeTab === 'agents' ? isSuperAdmin : hasWritePermission) && (
-              <button className="btn btn-primary" onClick={openCreateForm}>
-                <Plus size={16} /> Novo
-              </button>
-            )}
-          </div>
-        </div>
-
-        {error && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-            backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)',
-            color: '#ef4444', padding: '16px', borderRadius: 'var(--radius)', marginBottom: '24px'
-          }}>
-            <AlertCircle size={20} />
-            <span>{error}</span>
-          </div>
+    <div>
+      <SideNavBar
+        activeTab={activeTab}
+        onTabChange={navigateToTab}
+        onNewLead={handleNewLead}
+        systemName={systemName}
+        systemLogo={systemLogo}
+        isSuperAdmin={isSuperAdmin}
+        collapsed={isMainSidebarCollapsed}
+        onToggleCollapse={() => {
+          const next = !isMainSidebarCollapsed;
+          setIsMainSidebarCollapsed(next);
+          localStorage.setItem('sidebar_collapsed', String(next));
+        }}
+        onLogout={handleLogout}
+        userName={user?.name}
+      />
+      <TopAppBar />
+      <main className={`${isMainSidebarCollapsed ? 'ml-20' : 'ml-64'} mt-16 p-gutter min-h-[calc(100vh-64px)] overflow-x-auto`}>
+        {activeTab === 'leads' && (leadViewMode === 'dashboard' || leadViewMode === null) && (
+          <DashboardPage
+            onLeadClick={handleLeadClick}
+            onNewLead={handleNewLead}
+            leads={getFilteredLeads()}
+            agents={agents}
+            empresas={empresas}
+            updateLead={updateLead}
+            filterEmpresaId={filterEmpresaId}
+            filterAgentId={filterAgentId}
+            onFilterEmpresaChange={setFilterEmpresaId}
+            onFilterAgentChange={setFilterAgentId}
+          />
         )}
 
-        {isLoadingTab() && (activeTab === 'leads' ? leads.length === 0 : true) ? (
-          <SkeletonView tab={activeTab} />
-        ) : (
-          <>
-            {activeTab === 'empresas' && isSuperAdmin && (
-              <EmpresasPage
-                empresas={getFilteredEmpresas()}
-                showInactive={showInactive}
-                hasWritePermission={hasWritePermission}
-                createEmpresa={createEmpresa}
-                updateEmpresa={updateEmpresa}
-                deleteEmpresa={deleteEmpresa}
-                openCreateForm={openCreateForm}
-                openEditForm={openEditForm}
-                isFormOpen={isFormOpen}
-                setIsFormOpen={setIsFormOpen}
-                editingId={editingId}
-                empresaName={empresaName}
-                setEmpresaName={setEmpresaName}
-                empresaLogo={empresaLogo}
-                setEmpresaLogo={setEmpresaLogo}
-                handleLogoUpload={handleLogoUpload}
-                actionLoading={actionLoading}
-                handleSave={handleSave}
-                confirmDelete={confirmDelete}
-                deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
-                handleDelete={handleDelete}
-                setDeleteModal={setDeleteModal}
-              />
-            )}
+        {activeTab === 'empresas' && isSuperAdmin && (
+          <EmpresasPage
+            empresas={getFilteredEmpresas()}
+            showInactive={showInactive}
+            hasWritePermission={hasWritePermission}
+            createEmpresa={createEmpresa}
+            updateEmpresa={updateEmpresa}
+            deleteEmpresa={deleteEmpresa}
+            openCreateForm={openCreateForm}
+            openEditForm={openEditForm}
+            isFormOpen={isFormOpen}
+            setIsFormOpen={setIsFormOpen}
+            editingId={editingId}
+            empresaName={empresaName}
+            setEmpresaName={setEmpresaName}
+            empresaLogo={empresaLogo}
+            setEmpresaLogo={setEmpresaLogo}
+            handleLogoUpload={handleLogoUpload}
+            actionLoading={actionLoading}
+            handleSave={handleSave}
+            confirmDelete={confirmDelete}
+            deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
+            handleDelete={handleDelete}
+            setDeleteModal={setDeleteModal}
+          />
+        )}
 
-            {activeTab === 'agents' && (
-              <AgentsPage
-                getGroupedAgents={getGroupedAgents}
-                hasWritePermission={hasWritePermission}
-                isSuperAdmin={isSuperAdmin}
-                empresas={empresas}
-                showEvolutionQrCode={showEvolutionQrCode}
-                openEditForm={openEditForm}
-                confirmDelete={confirmDelete}
-                isFormOpen={isFormOpen}
-                setIsFormOpen={setIsFormOpen}
-                editingId={editingId}
-                agentEditData={agentEditData}
-                handleAgentSave={handleAgentSave}
-                evolutionInstances={evolutionInstances}
-                actionLoading={actionLoading}
-                deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
-                handleDelete={handleDelete}
-                setDeleteModal={setDeleteModal}
-                qrModal={qrModal}
-                setQrModal={setQrModal}
-              />
-            )}
+        {activeTab === 'agents' && (
+          <AgentsPage
+            getGroupedAgents={getGroupedAgents}
+            hasWritePermission={hasWritePermission}
+            isSuperAdmin={isSuperAdmin}
+            empresas={empresas}
+            showEvolutionQrCode={showEvolutionQrCode}
+            openEditForm={openEditForm}
+            confirmDelete={confirmDelete}
+            isFormOpen={isFormOpen}
+            setIsFormOpen={setIsFormOpen}
+            editingId={editingId}
+            agentEditData={agentEditData}
+            handleAgentSave={handleAgentSave}
+            evolutionInstances={evolutionInstances}
+            actionLoading={actionLoading}
+            deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
+            handleDelete={handleDelete}
+            setDeleteModal={setDeleteModal}
+            qrModal={qrModal}
+            setQrModal={setQrModal}
+          />
+        )}
 
-            {activeTab === 'follow-ups' && (
-              <FollowUpsPage
-                getGroupedFollowUps={getGroupedFollowUps}
-                getFilteredAgents={getFilteredAgents}
-                hasWritePermission={hasWritePermission}
-                openEditForm={openEditForm}
-                confirmDelete={confirmDelete}
-                isFormOpen={isFormOpen}
-                setIsFormOpen={setIsFormOpen}
-                editingId={editingId}
-                followOrder={followOrder}
-                setFollowOrder={setFollowOrder}
-                followAgentId={followAgentId}
-                setFollowAgentId={setFollowAgentId}
-                followMessage={followMessage}
-                setFollowMessage={setFollowMessage}
-                followTime={followTime}
-                setFollowTime={setFollowTime}
-                followActive={followActive}
-                setFollowActive={setFollowActive}
-                actionLoading={actionLoading}
-                handleSave={handleSave}
-                deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
-                handleDelete={handleDelete}
-                setDeleteModal={setDeleteModal}
-              />
-            )}
+        {activeTab === 'follow-ups' && (
+          <FollowUpsPage
+            getGroupedFollowUps={getGroupedFollowUps}
+            getFilteredAgents={getFilteredAgents}
+            hasWritePermission={hasWritePermission}
+            openEditForm={openEditForm}
+            confirmDelete={confirmDelete}
+            isFormOpen={isFormOpen}
+            setIsFormOpen={setIsFormOpen}
+            editingId={editingId}
+            followOrder={followOrder}
+            setFollowOrder={setFollowOrder}
+            followAgentId={followAgentId}
+            setFollowAgentId={setFollowAgentId}
+            followMessage={followMessage}
+            setFollowMessage={setFollowMessage}
+            followTime={followTime}
+            setFollowTime={setFollowTime}
+            followActive={followActive}
+            setFollowActive={setFollowActive}
+            actionLoading={actionLoading}
+            handleSave={handleSave}
+            deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
+            handleDelete={handleDelete}
+            setDeleteModal={setDeleteModal}
+          />
+        )}
 
-            {activeTab === 'leads' && (
-              <LeadsPage
-                updateLead={updateLead}
-                getFilteredLeads={getFilteredLeads}
-                getFilteredAgents={getFilteredAgents}
-                isSuperAdmin={isSuperAdmin}
-                empresas={empresas}
-                agents={agents}
-                filterEmpresaId={filterEmpresaId}
-                setFilterEmpresaId={setFilterEmpresaId}
-                filterAgentId={filterAgentId}
-                setFilterAgentId={setFilterAgentId}
-                hasWritePermission={hasWritePermission}
-                openEditForm={openEditForm}
-                confirmDelete={confirmDelete}
-                setSelectedLeadId={setSelectedLeadId}
-                setActiveTab={navigateToTab}
-                isFormOpen={isFormOpen}
-                setIsFormOpen={setIsFormOpen}
-                editingId={editingId}
-                leadName={leadName}
-                setLeadName={setLeadName}
-                leadAgentId={leadAgentId}
-                setLeadAgentId={setLeadAgentId}
-                leadRemoteJid={leadRemoteJid}
-                setLeadRemoteJid={setLeadRemoteJid}
-                leadStatus={leadStatus}
-                setLeadStatus={setLeadStatus}
-                leadValue={leadValue}
-                setLeadValue={setLeadValue}
-                actionLoading={actionLoading}
-                handleSave={handleSave}
-                deleteModal={{ isOpen: deleteModal.isOpen, id: deleteModal.id, name: deleteModal.name }}
-                handleDelete={handleDelete}
-                setDeleteModal={setDeleteModal}
-                refetchLeads={refetchLeads}
-                systemLogo={systemLogo}
-                userName={user?.name}
-              />
-            )}
+        {activeTab === 'messages' && (
+          <MessagesPage
+            chatSearchQuery={chatSearchQuery}
+            setChatSearchQuery={setChatSearchQuery}
+            getGroupedLeads={getGroupedLeads}
+            selectedLeadId={selectedLeadId}
+            setSelectedLeadId={setSelectedLeadId}
+            chatHistory={chatHistory}
+            historySource={historySource}
+            historyTable={historyTable}
+            chatContainerRef={chatContainerRef}
+            selectedLeadName={getFilteredLeads().find(l => l.id === selectedLeadId)?.name || 'Conversa'}
+            userName={user?.name}
+            systemLogo={systemLogo}
+          />
+        )}
 
-            {activeTab === 'messages' && (
-              <MessagesPage
-                chatSearchQuery={chatSearchQuery}
-                setChatSearchQuery={setChatSearchQuery}
-                getGroupedLeads={getGroupedLeads}
-                selectedLeadId={selectedLeadId}
-                setSelectedLeadId={setSelectedLeadId}
-                chatHistory={chatHistory}
-                historySource={historySource}
-                historyTable={historyTable}
-                chatContainerRef={chatContainerRef}
-                selectedLeadName={getFilteredLeads().find(l => l.id === selectedLeadId)?.name || 'Conversa'}
-                userName={user?.name}
-                systemLogo={systemLogo}
-              />
-            )}
-
-            {activeTab === 'users' && isSuperAdmin && (
-              <UsersPage empresas={empresas} />
-            )}
-          </>
+        {activeTab === 'users' && isSuperAdmin && (
+          <UsersPage empresas={empresas} />
         )}
       </main>
     </div>

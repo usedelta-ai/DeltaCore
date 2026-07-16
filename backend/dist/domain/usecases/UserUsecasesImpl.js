@@ -68,15 +68,19 @@ class UserUsecasesImpl {
         this.checkSuperAdmin(user);
         return this.db.deleteUser(id);
     }
-    async login(email, password) {
+    async login(email, password, empresaId) {
         const user = await this.db.getUserByEmail(email);
         if (!user || !this.verifyPassword(password, user.password)) {
             throw new Error('Invalid email or password');
         }
+        if (empresaId !== undefined && user.role !== 'superadmin' && user.empresa_id !== empresaId) {
+            throw new Error('Acesso não autorizado para esta empresa');
+        }
         let empresaName = null;
         let empresaLogo = null;
-        if (user.empresa_id) {
-            const empresas = await this.db.getEmpresas(user.empresa_id);
+        const activeEmpresaId = user.empresa_id || empresaId;
+        if (activeEmpresaId) {
+            const empresas = await this.db.getEmpresas(activeEmpresaId);
             if (empresas && empresas.length > 0) {
                 empresaName = empresas[0].name;
                 empresaLogo = empresas[0].logo || null;
@@ -85,7 +89,7 @@ class UserUsecasesImpl {
         const payload = {
             userId: user.id,
             role: user.role,
-            companyId: user.empresa_id,
+            companyId: activeEmpresaId,
             exp: Date.now() + 1000 * 60 * 60 * 24 // 24 hours
         };
         const token = this.generateJWT(payload);
@@ -96,7 +100,7 @@ class UserUsecasesImpl {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                empresa_id: user.empresa_id,
+                empresa_id: activeEmpresaId,
                 empresa_name: empresaName,
                 empresa_logo: empresaLogo
             }

@@ -364,7 +364,6 @@ class ChatUsecasesImpl {
             response = await this.evolution.sendTextMessage(instanceName, cleanNumber, finalContent);
         }
         const messageId = response?.key?.id || response?.message?.key?.id || `platform-${Date.now()}`;
-        // Persist in DB
         const savedMsg = await this.db.createMessage({
             agent_id: lead.agent_id,
             session_id: lead.session_id || lead.remote_jid_alt,
@@ -374,7 +373,8 @@ class ChatUsecasesImpl {
             remote_jid: lead.remote_jid_alt,
             message_type: options?.messageType || 'text',
             message_id: messageId,
-            quote_message_content: quotedText
+            quote_message_content: quotedText,
+            user_id: user.userId,
         });
         if (lead.status === 'NOVO') {
             const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);

@@ -61,6 +61,16 @@ class MainController {
             reply.status(500).send({ error: err.message || 'Failed to delete empresa.' });
         }
     }
+    async getPublicEmpresa(request, reply) {
+        const { base64Id } = request.params;
+        try {
+            const data = await this.empresaUsecases.getPublicEmpresa(base64Id);
+            return data;
+        }
+        catch (err) {
+            reply.status(404).send({ error: err.message || 'Empresa não encontrada.' });
+        }
+    }
     // ---------------------------------------------------------------------------
     // AGENTS
     // ---------------------------------------------------------------------------
@@ -308,9 +318,9 @@ class MainController {
     // AUTH & USERS
     // ---------------------------------------------------------------------------
     async login(request, reply) {
-        const { email, password } = request.body;
+        const { email, password, empresaId } = request.body;
         try {
-            const data = await this.userUsecases.login(email, password);
+            const data = await this.userUsecases.login(email, password, empresaId !== undefined ? Number(empresaId) : undefined);
             return data;
         }
         catch (err) {

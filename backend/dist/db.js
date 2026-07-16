@@ -40,9 +40,10 @@ exports.db = void 0;
 exports.checkTableExists = checkTableExists;
 const pg_1 = require("pg");
 const dotenv_1 = __importDefault(require("dotenv"));
+const path_1 = __importDefault(require("path"));
 const node_postgres_1 = require("drizzle-orm/node-postgres");
 const schema = __importStar(require("./db/schema"));
-dotenv_1.default.config();
+dotenv_1.default.config({ path: path_1.default.join(__dirname, '../../.env') });
 const pool = new pg_1.Pool({
     connectionString: process.env.DATABASE_URL,
 });

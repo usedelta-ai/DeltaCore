@@ -6,6 +6,7 @@ async function setupRoutes(app, controller) {
     // Pre-handler hook for all API routes to check authentication & tenancy roles
     app.addHook('preHandler', AuthMiddleware_1.authMiddleware);
     // Empresas
+    app.get('/api/empresas/public/:base64Id', (req, rep) => controller.getPublicEmpresa(req, rep));
     app.get('/api/empresas', (req, rep) => controller.getEmpresas(req, rep));
     app.post('/api/empresas', (req, rep) => controller.createEmpresa(req, rep));
     app.put('/api/empresas/:id', (req, rep) => controller.updateEmpresa(req, rep));

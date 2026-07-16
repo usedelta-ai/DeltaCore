@@ -3,6 +3,10 @@ import { Pencil, Trash2, Image, Copy, Check } from 'lucide-react';
 import type { Empresa } from '../services/api';
 import { getBoardUrl } from '../services/api';
 import { ConfirmationModal } from '../components/Modal';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
+import { FormInput } from '../components/ui/FormInput';
 
 interface EmpresasPageProps {
   empresas: Empresa[];
@@ -65,189 +69,77 @@ export const EmpresasPage: React.FC<EmpresasPageProps> = ({
 
   return (
     <>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-        gap: '24px',
-        padding: '8px 0 24px 0'
-      }}>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6 py-2 pb-6">
         {visibleEmpresas.map(emp => (
-          <div 
-            key={emp.id} 
-            className="card" 
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              borderRadius: '20px',
-              border: '1px solid hsla(var(--card-border) / 0.6)',
-              background: 'linear-gradient(135deg, hsl(var(--card)) 0%, hsla(var(--card) / 0.9) 100%)',
-              padding: '24px',
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
-              opacity: emp.active ? 1 : 0.7,
-              position: 'relative',
-              overflow: 'hidden'
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(0, 0, 0, 0.12)';
-              e.currentTarget.style.borderColor = 'hsla(var(--primary) / 0.4)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 20px -2px rgba(0, 0, 0, 0.05)';
-              e.currentTarget.style.borderColor = 'hsla(var(--card-border) / 0.6)';
-            }}
+          <div
+            key={emp.id}
+            className="flex flex-col justify-between rounded-2xl border border-border-low-contrast bg-white bg-gradient-to-br from-white via-white to-surface-subtle p-6 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-primary/40 relative overflow-hidden opacity-100"
+            style={{ opacity: emp.active ? 1 : 0.7 }}
           >
-            {/* Top Info Header */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+              <div className="flex justify-between items-start mb-5">
                 {emp.logo ? (
-                  <img 
-                    src={`data:image/png;base64,${emp.logo}`} 
-                    alt={emp.name} 
-                    style={{
-                      width: '64px',
-                      height: '64px',
-                      borderRadius: '16px',
-                      objectFit: 'cover',
-                      border: '1px solid hsla(var(--card-border) / 0.8)',
-                      boxShadow: '0 8px 16px -4px rgba(0, 0, 0, 0.08)'
-                    }} 
+                  <img
+                    src={`data:image/png;base64,${emp.logo}`}
+                    alt={emp.name}
+                    className="w-16 h-16 rounded-2xl object-cover border border-border-low-contrast shadow-sm"
                   />
                 ) : (
-                  <div style={{
-                    width: '64px',
-                    height: '64px',
-                    borderRadius: '16px',
-                    background: 'linear-gradient(135deg, hsla(262, 83%, 58%, 0.15) 0%, hsla(262, 83%, 58%, 0.05) 100%)',
-                    color: 'hsl(var(--primary))',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '24px',
-                    fontWeight: 700,
-                    border: '1px solid hsla(var(--primary) / 0.15)'
-                  }}>
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center text-2xl font-bold border border-primary/15">
                     {emp.name.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span style={{
-                  padding: '6px 14px',
-                  borderRadius: '9999px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  backgroundColor: emp.active ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-                  color: emp.active ? '#10b981' : '#ef4444',
-                  border: emp.active ? '1px solid rgba(16, 185, 129, 0.15)' : '1px solid rgba(239, 68, 68, 0.15)'
-                }}>
+                <Badge variant={emp.active ? 'success' : 'danger'}>
                   {emp.active ? 'Ativa' : 'Inativa'}
-                </span>
+                </Badge>
               </div>
 
-              <h3 style={{
-                fontSize: '18px',
-                fontWeight: 700,
-                color: 'hsl(var(--foreground))',
-                margin: '0 0 6px 0',
-                letterSpacing: '-0.5px',
-                lineHeight: '1.3'
-              }}>
+              <h3 className="text-headline-md font-headline-md font-bold text-on-surface m-0 mb-1.5 tracking-tight leading-tight">
                 {emp.name}
               </h3>
-              
-              <div style={{
-                fontSize: '12px',
-                color: 'hsl(var(--muted-foreground))',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                marginBottom: '24px'
-              }}>
+
+              <div className="text-label-md text-on-surface-variant flex items-center gap-1 mb-6">
                 <span>Registrada em:</span>
-                <strong style={{ color: 'hsl(var(--foreground))', fontWeight: 500 }}>
+                <strong className="text-on-surface font-medium">
                   {new Date(emp.created_at).toLocaleDateString()}
                 </strong>
               </div>
             </div>
 
-            {/* Footer Actions */}
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '10px',
-              borderTop: '1px solid hsla(var(--card-border) / 0.5)',
-              paddingTop: '16px',
-              marginTop: 'auto'
-            }}>
+            <div className="flex flex-wrap gap-2.5 border-t border-border-low-contrast/50 pt-4 mt-auto">
               {emp.active && (
                 <>
-                  <a 
-                    href={getBoardUrl(emp.id, emp.name)} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="btn btn-primary btn-sm" 
-                    style={{
-                      textDecoration: 'none',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '8px 14px',
-                      borderRadius: '10px',
-                      fontWeight: 600,
-                      boxShadow: '0 4px 12px -2px hsla(262, 83%, 58%, 0.2)'
-                    }}
+                  <a
+                    href={getBoardUrl(emp.id, emp.name)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-label-md bg-primary text-on-primary hover:opacity-90 transition-opacity shadow-md shadow-primary/20 no-underline cursor-pointer"
                   >
                     🔗 Board
                   </a>
-                  <button 
-                    className="btn btn-secondary btn-sm" 
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => handleCopyLink(emp.id)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '8px 14px',
-                      borderRadius: '10px',
-                      fontWeight: 600,
-                      backgroundColor: 'hsl(var(--secondary))',
-                      border: '1px solid hsla(var(--card-border) / 0.6)'
-                    }}
                   >
-                    {copiedId === emp.id ? <Check size={13} style={{ color: '#10b981' }} /> : <Copy size={13} />}
-                    {copiedId === emp.id ? 'Copiado!' : 'Copiar Login'}
-                  </button>
+                    {copiedId === emp.id ? (
+                      <><Check size={13} className="text-status-success" /> Copiado!</>
+                    ) : (
+                      <><Copy size={13} /> Copiar Login</>
+                    )}
+                  </Button>
                   {hasWritePermission && (
-                    <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
-                      <button 
-                        className="btn btn-ghost btn-sm" 
+                    <div className="flex gap-2 ml-auto">
+                      <button
                         onClick={() => openEditForm(emp)}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'hsl(var(--muted-foreground))'
-                        }}
+                        className="p-2 rounded-lg text-on-surface-variant hover:bg-surface-container transition-all cursor-pointer border-none"
                         title="Editar Empresa"
                       >
                         <Pencil size={14} />
                       </button>
-                      <button 
-                        className="btn btn-ghost btn-sm" 
+                      <button
                         onClick={() => confirmDelete(emp.id, emp.name)}
-                        style={{
-                          padding: '8px 10px',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#ef4444'
-                        }}
+                        className="p-2 rounded-lg text-status-critical hover:bg-status-critical/10 transition-all cursor-pointer border-none"
                         title="Inativar Empresa"
                       >
                         <Trash2 size={14} />
@@ -262,90 +154,65 @@ export const EmpresasPage: React.FC<EmpresasPageProps> = ({
       </div>
 
       {isFormOpen && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
-          backgroundColor: 'rgba(9, 10, 12, 0.85)',
-          backdropFilter: 'blur(12px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '20px',
-        }}>
-          <div style={{
-            width: '100%', maxWidth: '560px',
-            background: 'hsl(var(--card))',
-            border: '1px solid hsl(var(--card-border))',
-            borderRadius: '20px',
-            boxShadow: '0 24px 60px rgba(0,0,0,0.15)',
-            display: 'flex', flexDirection: 'column',
-            overflow: 'hidden',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid hsl(var(--card-border))' }}>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>{editingId ? 'Editar' : 'Nova'} Empresa</h2>
-              <button onClick={() => setIsFormOpen(false)} className="btn-ghost" style={{
-                width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '18px',
-                color: 'hsl(var(--muted-foreground))', background: 'transparent',
-              }}>✕</button>
+        <Modal
+          isOpen={isFormOpen}
+          onClose={() => setIsFormOpen(false)}
+          title={`${editingId ? 'Editar' : 'Nova'} Empresa`}
+        >
+          <form onSubmit={handleSave} className="flex flex-col gap-5 p-6">
+            <FormInput
+              label="Nome da Empresa"
+              placeholder="Ex: Minha Empresa Ltda"
+              value={empresaName}
+              onChange={e => setEmpresaName(e.target.value)}
+              required
+            />
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-label-md font-label-md text-on-surface-variant">Logo</label>
+              <label className="flex flex-col items-center justify-center gap-2 cursor-pointer border-2 border-dashed border-border-low-contrast rounded-xl p-6 bg-surface-subtle transition-all duration-200 hover:border-primary">
+                {empresaLogo ? (
+                  <img
+                    src={`data:image/png;base64,${empresaLogo}`}
+                    alt="Preview"
+                    className="h-20 rounded-xl object-contain"
+                  />
+                ) : (
+                  <>
+                    <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center text-on-surface-variant">
+                      <Image size={24} />
+                    </div>
+                    <span className="text-body-sm text-on-surface-variant">
+                      Clique para selecionar uma imagem
+                    </span>
+                  </>
+                )}
+                <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+              </label>
             </div>
-            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px' }}>
-              <div className="form-group">
-                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Nome da Empresa</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Ex: Minha Empresa Ltda"
-                  value={empresaName}
-                  onChange={e => setEmpresaName(e.target.value)}
-                  required
-                  style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
-                />
-              </div>
 
-              <div className="form-group">
-                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Logo</label>
-                <label style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  gap: '8px', cursor: 'pointer',
-                  border: '2px dashed hsl(var(--card-border))',
-                  borderRadius: '12px', padding: '24px',
-                  background: 'hsl(var(--background))',
-                  transition: 'all 0.2s',
-                }}
-                  onDragOver={e => { e.preventDefault(); (e.currentTarget as HTMLElement).style.borderColor = 'hsl(var(--primary))'; }}
-                  onDragLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = ''; }}
-                >
-                  {empresaLogo ? (
-                    <img src={`data:image/png;base64,${empresaLogo}`} alt="Preview" style={{ height: '80px', borderRadius: '12px', objectFit: 'contain' }} />
-                  ) : (
-                    <>
-                      <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'hsl(var(--card))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--muted-foreground))' }}>
-                        <Image size={24} />
-                      </div>
-                      <span style={{ fontSize: '13px', color: 'hsl(var(--muted-foreground))' }}>Clique para selecionar uma imagem</span>
-                    </>
-                  )}
-                  <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
-                </label>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid hsl(var(--card-border))', paddingTop: '20px', marginTop: '4px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}
-                  style={{ padding: '10px 20px', borderRadius: '10px' }}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}
-                  style={{ padding: '10px 20px', borderRadius: '10px' }}>Salvar</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex justify-end gap-2.5 border-t border-border-low-contrast pt-5 mt-1">
+              <Button type="button" variant="secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}>
+                Cancelar
+              </Button>
+              <Button type="submit" variant="primary" disabled={actionLoading}>
+                {actionLoading ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
 
-      <ConfirmationModal
-        isOpen={deleteModal.isOpen}
-        title="Inativar Registro"
-        description={`Tem certeza que deseja inativar "${deleteModal.name}"?`}
-        onConfirm={handleDelete}
-        onClose={() => setDeleteModal({ isOpen: false, id: 0, name: '' })}
-        disabled={actionLoading}
-      />
+      {deleteModal.isOpen && (
+        <ConfirmationModal
+          isOpen={deleteModal.isOpen}
+          title="Inativar Registro"
+          description={`Tem certeza que deseja inativar "${deleteModal.name}"?`}
+          onConfirm={handleDelete}
+          onClose={() => setDeleteModal({ isOpen: false, id: 0, name: '' })}
+          disabled={actionLoading}
+        />
+      )}
     </>
   );
 };

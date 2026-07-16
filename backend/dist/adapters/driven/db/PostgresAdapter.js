@@ -403,6 +403,7 @@ class PostgresAdapter {
             message_type: message.message_type,
             message_id: message.message_id,
             quote_message_content: message.quote_message_content || null,
+            user_id: message.user_id ?? null,
         })
             .returning();
         const row = res[0];

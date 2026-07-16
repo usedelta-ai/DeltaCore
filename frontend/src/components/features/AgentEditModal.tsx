@@ -1,10 +1,21 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { EditorWrapper } from '../ui/EditorWrapper';
+import { Avatar } from '../ui/Avatar';
 import type { Empresa } from '../../services/api';
 
 interface CursorState {
   cursor: { lineNumber: number; column: number } | null;
   scrollTop: number | null;
+}
+
+interface EditorInstance {
+  getPosition: () => { lineNumber: number; column: number } | null;
+  setPosition: (pos: { lineNumber: number; column: number }) => void;
+  revealPositionInCenter: (pos: { lineNumber: number; column: number }) => void;
+  getScrollTop: () => number;
+  setScrollTop: (top: number) => void;
+  onDidChangeCursorPosition: (cb: (e: { position: { lineNumber: number; column: number } }) => void) => void;
+  onDidScrollChange: (cb: (e: { scrollTop: number }) => void) => void;
 }
 
 interface TabConfig {
@@ -37,15 +48,15 @@ interface AgentFormData {
 interface AgentEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: any) => Promise<void>;
+  onSave: (data: Record<string, unknown>) => Promise<void>;
   initialData: Partial<AgentFormData> | null;
   empresas: Empresa[];
-  evolutionInstances: any[];
+  evolutionInstances: Record<string, string>[];
   isSuperAdmin: boolean;
   editingId: number | null;
 }
 
-function serializeJSON(obj: any, fallback: string): string {
+function serializeJSON(obj: unknown, fallback: string): string {
   if (!obj) return fallback;
   if (typeof obj === 'string') {
     try { return JSON.stringify(JSON.parse(obj), null, 2); }
@@ -55,35 +66,36 @@ function serializeJSON(obj: any, fallback: string): string {
   catch { return fallback; }
 }
 
-function extractField(data: any, path: string): string {
+function extractField(data: unknown, path: string): string {
   if (!data) return '{}';
   const parts = path.split('.');
-  let val: any = data;
+  let val: unknown = data;
   for (const p of parts) {
     if (val == null || typeof val !== 'object') return '{}';
-    val = val[p];
+    val = (val as Record<string, unknown>)[p];
   }
   return serializeJSON(val, '{}');
 }
 
-function buildInitialFormData(data: any, defaultEmpresaId: number): AgentFormData {
-  const sd = data?.search_data;
-  const vd = data?.validate_data;
+function buildInitialFormData(data: unknown, defaultEmpresaId: number): AgentFormData {
+  const d = data as Record<string, unknown> | null;
+  const sd = d?.search_data;
+  const vd = d?.validate_data;
 
   return {
-    name: data?.name || '',
-    phone_number: data?.phone_number || '',
-    instance_name: data?.instance_name || '',
-    status: data?.status ?? 1,
-    empresa_id: data?.empresa_id ?? defaultEmpresaId,
-    upsert_lead: data?.upsert_lead ?? true,
-    prompt: data?.prompt || '',
-    translations: serializeJSON(data?.translations, '{}'),
-    search: data?.search ?? false,
+    name: (d?.name as string) || '',
+    phone_number: (d?.phone_number as string) || '',
+    instance_name: (d?.instance_name as string) || '',
+    status: (d?.status as number) ?? 1,
+    empresa_id: (d?.empresa_id as number) ?? defaultEmpresaId,
+    upsert_lead: (d?.upsert_lead as boolean) ?? true,
+    prompt: (d?.prompt as string) || '',
+    translations: serializeJSON(d?.translations, '{}'),
+    search: (d?.search as boolean) ?? false,
     search_itens: extractField(sd, 'itens'),
     search_filters: extractField(sd, 'filters'),
     search_schema: extractField(sd, 'schema'),
-    validate: data?.validate ?? false,
+    validate: (d?.validate as boolean) ?? false,
     validate_itens: extractField(vd, 'itens'),
     validate_filters: extractField(vd, 'filters'),
     validate_schema: extractField(vd, 'schema'),
@@ -106,9 +118,15 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
   const [activeTab, setActiveTab] = useState('prompt');
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const editorInstanceRef = useRef<any>(null);
+  const [savedCursorPos, setSavedCursorPos] = useState<CursorState['cursor']>(null);
+  const [savedScrollPos, setSavedScrollPos] = useState<CursorState['scrollTop']>(null);
+  const editorInstanceRef = useRef<EditorInstance>(null);
   const savedPositions = useRef<Record<string, CursorState>>({});
   const prevOpenRef = useRef(false);
+
+  const currentEmpresa = useMemo(() => {
+    return empresas.find(e => e.id === formData.empresa_id);
+  }, [formData.empresa_id, empresas]);
 
   useEffect(() => {
     const justOpened = isOpen && !prevOpenRef.current;
@@ -122,12 +140,12 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
   }, [isOpen, initialData, editingId, empresas]);
 
   const tabs: TabConfig[] = useMemo(() => [
-    { key: 'prompt', label: 'Prompt', language: 'plaintext', dataKey: 'prompt', enabled: true },
+    { key: 'prompt', label: 'Prompt Principal', language: 'plaintext', dataKey: 'prompt', enabled: true },
     { key: 'translations', label: 'Traduções', language: 'json', dataKey: 'translations', enabled: true },
-    { key: 'search_itens', label: 'Search - Itens', language: 'json', dataKey: 'search_itens', enabled: formData.search },
-    { key: 'search_filters', label: 'Search - Filtros', language: 'json', dataKey: 'search_filters', enabled: formData.search },
-    { key: 'search_schema', label: 'Search - Schema', language: 'json', dataKey: 'search_schema', enabled: formData.search },
-    { key: 'validate_itens', label: 'Validate - Itens', language: 'json', dataKey: 'validate_itens', enabled: formData.validate },
+    { key: 'search_itens', label: 'Busca Semântica', language: 'json', dataKey: 'search_itens', enabled: formData.search },
+    { key: 'search_filters', label: 'Busca - Filtros', language: 'json', dataKey: 'search_filters', enabled: formData.search },
+    { key: 'search_schema', label: 'Busca - Schema', language: 'json', dataKey: 'search_schema', enabled: formData.search },
+    { key: 'validate_itens', label: 'Regras Globais', language: 'json', dataKey: 'validate_itens', enabled: formData.validate },
     { key: 'validate_filters', label: 'Validate - Filtros', language: 'json', dataKey: 'validate_filters', enabled: formData.validate },
     { key: 'validate_schema', label: 'Validate - Schema', language: 'json', dataKey: 'validate_schema', enabled: formData.validate },
   ], [formData.search, formData.validate]);
@@ -149,7 +167,7 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
     setFormData(prev => ({ ...prev, [activeTabConfig.dataKey as keyof AgentFormData]: val }));
   }, [activeTabConfig.dataKey]);
 
-  const handleEditorMount = useCallback((editor: any) => {
+  const handleEditorMount = useCallback((editor: EditorInstance) => {
     editorInstanceRef.current = editor;
   }, []);
 
@@ -175,7 +193,16 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
         scrollTop: editor.getScrollTop(),
       };
     }
+    const next = savedPositions.current[tabKey];
+    setSavedCursorPos(next?.cursor || null);
+    setSavedScrollPos(next?.scrollTop ?? null);
     setActiveTab(tabKey);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const pos = savedPositions.current[activeTab];
+    setSavedCursorPos(pos?.cursor || null);
+    setSavedScrollPos(pos?.scrollTop ?? null);
   }, [activeTab]);
 
   const updateField = useCallback(<K extends keyof AgentFormData>(key: K, value: AgentFormData[K]) => {
@@ -216,8 +243,8 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
       };
 
       await onSave(payload);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao salvar');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erro ao salvar');
     } finally {
       setActionLoading(false);
     }
@@ -225,66 +252,44 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
 
   if (!isOpen) return null;
 
-  const cursorPos = savedPositions.current[activeTab]?.cursor || null;
-  const scrollPos = savedPositions.current[activeTab]?.scrollTop ?? null;
-
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
-      backgroundColor: 'rgba(9, 10, 12, 0.85)',
-      backdropFilter: 'blur(12px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '20px',
-    }}>
-      <div style={{
-        width: '100%', height: '95vh',
-        background: 'hsl(var(--card))',
-        border: '1px solid hsl(var(--card-border))',
-        borderRadius: '20px',
-        boxShadow: '0 24px 60px rgba(0,0,0,0.15)',
-        display: 'flex', flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '16px 24px',
-          borderBottom: '1px solid hsl(var(--card-border))',
-          flexShrink: 0,
-        }}>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
-            {editingId ? 'Editar Agente' : 'Novo Agente'}
-          </h2>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {error && (
-              <span style={{ color: '#ef4444', fontSize: '13px' }}>{error}</span>
-            )}
-            <button onClick={onClose} className="btn-ghost" style={{
-              width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '18px',
-              color: 'hsl(var(--muted-foreground))', background: 'transparent',
-            }}>✕</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm transition-opacity duration-300">
+      <div className="bg-surface-container-lowest w-full max-w-[95vw] h-[95vh] rounded-[1.5rem] shadow-2xl flex flex-col overflow-hidden border border-outline-variant/30">
+        {/* HEADER */}
+        <header className="h-20 flex items-center justify-between px-8 border-b border-outline-variant/50 flex-shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container">
+              <span className="material-symbols-outlined">edit</span>
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold font-headline leading-tight">
+                {editingId ? 'Editar Agente' : 'Novo Agente'}
+              </h2>
+              <p className="text-sm text-on-surface-variant">
+                {editingId ? `ID: AG-${String(editingId).padStart(5, '0')}` : 'Novo agente'}
+                {currentEmpresa ? ` • ${currentEmpresa.name}` : ''}
+              </p>
+            </div>
           </div>
-        </div>
+          <div className="flex items-center gap-3">
+            {error && (
+              <span className="text-status-critical text-sm">{error}</span>
+            )}
+            <button
+              onClick={onClose}
+              className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-container-highest transition-colors group"
+            >
+              <span className="material-symbols-outlined text-on-surface-variant group-hover:rotate-90 transition-transform">close</span>
+            </button>
+          </div>
+        </header>
 
-        {/* Body */}
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          {/* Left Panel - Editor */}
-          <div style={{
-            flex: '1 1 0',
-            display: 'flex', flexDirection: 'column',
-            borderRight: '1px solid hsl(var(--card-border))',
-            minWidth: 0,
-          }}>
-            {/* Tab Bar */}
-            <div style={{
-              display: 'flex', gap: '2px',
-              padding: '8px 12px 0',
-              background: 'hsl(var(--background))',
-              borderBottom: '1px solid hsl(var(--card-border))',
-              overflowX: 'auto',
-              flexShrink: 0,
-            }}>
+        {/* BODY */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* LEFT SIDE: EDITOR AREA */}
+          <section className="flex-1 flex flex-col bg-surface border-r border-outline-variant/50 min-w-0">
+            {/* Editor Tabs */}
+            <div className="flex gap-1 px-4 pt-4 overflow-x-auto flex-shrink-0 scrollbar-hide">
               {tabs.map(tab => {
                 const isActive = activeTab === tab.key;
                 const isEnabled = tab.enabled;
@@ -293,23 +298,13 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
                     key={tab.key}
                     disabled={!isEnabled}
                     onClick={() => handleTabSwitch(tab.key)}
-                    style={{
-                      padding: '8px 16px',
-                      fontSize: '12px',
-                      fontWeight: isActive ? 600 : 400,
-                      border: 'none',
-                      background: isActive ? 'hsl(var(--card))' : 'transparent',
-                      color: isEnabled
-                        ? isActive ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))'
-                        : 'hsl(var(--muted-foreground) / 0.4)',
-                      cursor: isEnabled ? 'pointer' : 'not-allowed',
-                      borderTopLeftRadius: '6px',
-                      borderTopRightRadius: '6px',
-                      borderBottom: isActive ? '2px solid hsl(var(--primary))' : '2px solid transparent',
-                      whiteSpace: 'nowrap',
-                      transition: 'all 0.15s ease',
-                      opacity: isEnabled ? 1 : 0.4,
-                    }}
+                    className={`px-6 py-2.5 rounded-t-xl text-sm whitespace-nowrap transition-all ${
+                      !isEnabled
+                        ? 'text-outline/40 cursor-not-allowed'
+                        : isActive
+                          ? 'bg-surface-container-lowest border-x border-t border-outline-variant text-primary font-semibold'
+                          : 'text-on-surface-variant font-medium hover:bg-surface-container'
+                    }`}
                   >
                     {tab.label}
                   </button>
@@ -317,143 +312,250 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
               })}
             </div>
 
-            {/* Editor Area */}
-            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              <EditorWrapper
-                key={`${activeTab}-${editingId ?? 'new'}`}
-                itemKey={`${activeTab}-${editingId ?? 'new'}`}
-                initialValue={getEditorValue()}
-                onChange={handleEditorChange}
-                language={activeTabConfig.language}
-                cursorPosition={cursorPos}
-                scrollPosition={scrollPos}
-                onMount={handleEditorMount}
-                onCursorChange={handleCursorChange}
-                onScrollChange={handleScrollChange}
-              />
+            {/* Code Editor Interface */}
+            <div className="flex-1 bg-surface-container-lowest mx-4 mb-6 rounded-b-xl border border-outline-variant flex flex-col shadow-sm min-h-0">
+              <div className="bg-surface-container-low px-4 py-2 border-b border-outline-variant flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-error/40" />
+                  <span className="w-3 h-3 rounded-full bg-secondary-fixed/40" />
+                  <span className="w-3 h-3 rounded-full bg-status-success/40" />
+                  <span className="ml-4 text-[10px] font-mono text-outline uppercase tracking-widest">
+                    {activeTabConfig.label.replace(/\s/g, '_')}.{activeTabConfig.language === 'json' ? 'json' : 'xml'}
+                  </span>
+                </div>
+                <button
+                  className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                  onClick={() => {
+                    const textarea = document.querySelector('.monaco-editor');
+                    if (textarea) textarea.classList.add('opacity-50');
+                    setTimeout(() => {
+                      if (textarea) textarea.classList.remove('opacity-50');
+                    }, 800);
+                  }}
+                >
+                  <span className="material-symbols-outlined text-sm">auto_fix</span>
+                  Melhorar com IA
+                </button>
+              </div>
+
+              {/* Editor */}
+              <div className="flex-1 min-h-0">
+                <EditorWrapper
+                  key={`${activeTab}-${editingId ?? 'new'}`}
+                  itemKey={`${activeTab}-${editingId ?? 'new'}`}
+                  initialValue={getEditorValue()}
+                  onChange={handleEditorChange}
+                  language={activeTabConfig.language}
+                  cursorPosition={savedCursorPos}
+                  scrollPosition={savedScrollPos}
+                  onMount={handleEditorMount}
+                  onCursorChange={handleCursorChange}
+                  onScrollChange={handleScrollChange}
+                />
+              </div>
             </div>
-          </div>
+          </section>
 
-          {/* Right Panel - Form Fields */}
-          <div style={{
-            width: '280px', flexShrink: 0,
-            display: 'flex', flexDirection: 'column',
-            background: 'hsl(var(--background))',
-          }}>
-            <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div className="form-group">
-                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Nome</label>
-                  <input type="text" className="form-control" value={formData.name}
-                    onChange={e => updateField('name', e.target.value)} required />
+          {/* RIGHT SIDE: SETTINGS */}
+          <aside className="w-[380px] p-8 flex flex-col gap-6 overflow-y-auto bg-surface-container-lowest flex-shrink-0 custom-scrollbar">
+            <h3 className="font-headline font-semibold text-sm uppercase tracking-wider text-outline">Configurações Base</h3>
+
+            <div className="space-y-4">
+              {/* Nome */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-on-surface-variant flex items-center gap-2">
+                  Nome do Agente
+                  <span className="material-symbols-outlined text-[14px]">info</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={e => updateField('name', e.target.value)}
+                  className="w-full bg-surface-container px-4 py-2.5 rounded-lg border-none focus:ring-2 focus:ring-primary-container text-sm font-medium"
+                  placeholder="Ex: Assistente de Reservas"
+                />
+              </div>
+
+              {/* WhatsApp */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-on-surface-variant">WhatsApp Vinculado</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formData.phone_number}
+                    onChange={e => updateField('phone_number', e.target.value)}
+                    className="w-full bg-surface-container pl-10 pr-4 py-2.5 rounded-lg border-none focus:ring-2 focus:ring-primary-container text-sm font-medium"
+                    placeholder="+55 (47) 99999-9999"
+                  />
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">call</span>
                 </div>
+              </div>
 
-                <div className="form-group">
-                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Telefone</label>
-                  <input type="text" className="form-control" value={formData.phone_number}
-                    onChange={e => updateField('phone_number', e.target.value)} />
-                </div>
-
-                <div className="form-group">
-                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Instância</label>
-                  <select className="form-control" value={formData.instance_name}
-                    onChange={e => updateField('instance_name', e.target.value)}>
+              {/* Grid Dropdowns */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-on-surface-variant">Instância</label>
+                  <select
+                    value={formData.instance_name}
+                    onChange={e => updateField('instance_name', e.target.value)}
+                    className="w-full bg-surface-container px-3 py-2.5 rounded-lg border-none text-sm focus:ring-2 focus:ring-primary-container"
+                  >
                     <option value="">Selecione...</option>
-                    {evolutionInstances.map((inst: any) => (
+                    {evolutionInstances.map((inst: Record<string, string>) => (
                       <option key={inst.instanceName || inst.name} value={inst.instanceName || inst.name}>
                         {inst.instanceName || inst.name}
                       </option>
                     ))}
                   </select>
                 </div>
-
-                <div className="form-group">
-                  <label style={{ fontSize: '12px', fontWeight: 600 }}>Status</label>
-                  <select className="form-control" value={formData.status}
-                    onChange={e => updateField('status', Number(e.target.value))}>
-                    <option value={1}>Ativo</option>
-                    <option value={2}>Pendente</option>
-                  </select>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-on-surface-variant">Status</label>
+                  <div className="relative">
+                    <select
+                      value={formData.status}
+                      onChange={e => updateField('status', Number(e.target.value))}
+                      className={`w-full px-3 py-2.5 rounded-lg border-none text-sm font-bold appearance-none focus:ring-2 focus:ring-primary-container ${
+                        formData.status === 1
+                          ? 'bg-status-success/10 text-status-success'
+                          : 'bg-surface-container text-on-surface-variant'
+                      }`}
+                    >
+                      <option value={1}>Ativo</option>
+                      <option value={2}>Pendente</option>
+                      <option value={0}>Inativo</option>
+                    </select>
+                    {formData.status === 1 && (
+                      <span className="w-2 h-2 bg-status-success rounded-full absolute right-3 top-1/2 -translate-y-1/2" />
+                    )}
+                  </div>
                 </div>
+              </div>
 
-                {isSuperAdmin && (
-                  <div className="form-group">
-                    <label style={{ fontSize: '12px', fontWeight: 600 }}>Empresa</label>
-                    <select className="form-control" value={formData.empresa_id}
-                      onChange={e => updateField('empresa_id', Number(e.target.value))}>
+              {/* Empresa */}
+              {isSuperAdmin && (
+                <div className="space-y-1.5 pt-2">
+                  <label className="text-xs font-semibold text-on-surface-variant">Empresa Vinculada</label>
+                  <div className="flex items-center gap-3 bg-surface-container p-2 rounded-lg">
+                    <div className="w-8 h-8 rounded-md overflow-hidden bg-white flex-shrink-0">
+                      {currentEmpresa?.logo ? (
+                        <Avatar src={currentEmpresa.logo} name={currentEmpresa.name} size="md" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-surface-container-high">
+                          <span className="material-symbols-outlined text-outline text-sm">business</span>
+                        </div>
+                      )}
+                    </div>
+                    <select
+                      value={formData.empresa_id}
+                      onChange={e => updateField('empresa_id', Number(e.target.value))}
+                      className="flex-1 text-sm font-medium bg-transparent border-none focus:ring-0 cursor-pointer"
+                    >
                       {empresas.map(emp => (
                         <option key={emp.id} value={emp.id}>{emp.name}</option>
                       ))}
                     </select>
+                    <span className="material-symbols-outlined text-outline">swap_horiz</span>
                   </div>
-                )}
-
-                <div style={{ borderTop: '1px solid hsl(var(--card-border))', marginTop: '4px', paddingTop: '12px' }}>
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginBottom: '8px'
-                  }}>
-                    <input type="checkbox" checked={formData.upsert_lead}
-                      onChange={e => updateField('upsert_lead', e.target.checked)} />
-                    Upsert Lead
-                  </label>
-
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    fontSize: '12px', fontWeight: 600, cursor: 'pointer', marginBottom: '8px'
-                  }}>
-                    <input type="checkbox" checked={formData.search}
-                      onChange={e => {
-                        updateField('search', e.target.checked);
-                        if (!e.target.checked && activeTab.startsWith('search_')) {
-                          setActiveTab('prompt');
-                        }
-                      }} />
-                    Search (Ativar)
-                  </label>
-
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    fontSize: '12px', fontWeight: 600, cursor: 'pointer'
-                  }}>
-                    <input type="checkbox" checked={formData.validate}
-                      onChange={e => {
-                        updateField('validate', e.target.checked);
-                        if (!e.target.checked && activeTab.startsWith('validate_')) {
-                          setActiveTab('prompt');
-                        }
-                      }} />
-                    Validate (Ativar)
-                  </label>
                 </div>
+              )}
+            </div>
+
+            <div className="h-px bg-outline-variant/30 my-2" />
+
+            <h3 className="font-headline font-semibold text-sm uppercase tracking-wider text-outline">Permissões e Ações</h3>
+
+            <div className="space-y-3">
+              {/* Upsert Lead */}
+              <label className="flex items-center gap-3 p-3 bg-surface hover:bg-surface-container rounded-xl cursor-pointer transition-all border border-transparent hover:border-outline-variant/50 group">
+                <input
+                  type="checkbox"
+                  checked={formData.upsert_lead}
+                  onChange={e => updateField('upsert_lead', e.target.checked)}
+                  className="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary-container"
+                />
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold">Upsert Lead</span>
+                  <span className="text-[10px] text-outline">Cria/Atualiza contatos no CRM automaticamente</span>
+                </div>
+                <span className="material-symbols-outlined ml-auto text-outline group-hover:text-primary text-lg">database</span>
+              </label>
+
+              {/* Knowledge Search */}
+              <label className="flex items-center gap-3 p-3 bg-surface hover:bg-surface-container rounded-xl cursor-pointer transition-all border border-transparent hover:border-outline-variant/50 group">
+                <input
+                  type="checkbox"
+                  checked={formData.search}
+                  onChange={e => {
+                    updateField('search', e.target.checked);
+                    if (!e.target.checked && activeTab.startsWith('search_')) {
+                      setActiveTab('prompt');
+                    }
+                  }}
+                  className="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary-container"
+                />
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold">Knowledge Search</span>
+                  <span className="text-[10px] text-outline">Consulta base de documentos técnica</span>
+                </div>
+                <span className="material-symbols-outlined ml-auto text-outline group-hover:text-primary text-lg">search_insights</span>
+              </label>
+
+              {/* Validate Document */}
+              <label className="flex items-center gap-3 p-3 bg-surface hover:bg-surface-container rounded-xl cursor-pointer transition-all border border-transparent hover:border-outline-variant/50 group">
+                <input
+                  type="checkbox"
+                  checked={formData.validate}
+                  onChange={e => {
+                    updateField('validate', e.target.checked);
+                    if (!e.target.checked && activeTab.startsWith('validate_')) {
+                      setActiveTab('prompt');
+                    }
+                  }}
+                  className="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary-container"
+                />
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold">Validate Document</span>
+                  <span className="text-[10px] text-outline">OCR e validação de identidades (RG/CPF)</span>
+                </div>
+                <span className="material-symbols-outlined ml-auto text-outline group-hover:text-primary text-lg">verified_user</span>
+              </label>
+            </div>
+          </aside>
+        </div>
+
+        {/* FOOTER */}
+        <footer className="h-24 bg-surface-container-low px-8 flex items-center justify-between border-t border-outline-variant/50 flex-shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="flex -space-x-2">
+              <div className="w-8 h-8 rounded-full border-2 border-surface-container-low overflow-hidden bg-primary flex items-center justify-center text-white text-[10px] font-bold">
+                AK
+              </div>
+              <div className="w-8 h-8 rounded-full border-2 border-surface-container-low bg-primary text-[10px] flex items-center justify-center text-white font-bold">
+                +3
               </div>
             </div>
-
-            {/* Action Buttons */}
-            <div style={{
-              borderTop: '1px solid hsl(var(--card-border))',
-              padding: '16px',
-              display: 'flex', flexDirection: 'column', gap: '8px',
-            }}>
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%', justifyContent: 'center' }}
-                onClick={handleSave}
-                disabled={actionLoading}
-              >
-                {actionLoading ? 'Salvando...' : 'Salvar'}
-              </button>
-              <button
-                className="btn btn-secondary"
-                style={{ width: '100%', justifyContent: 'center' }}
-                onClick={onClose}
-                disabled={actionLoading}
-              >
-                Cancelar
-              </button>
-            </div>
+            <span className="text-xs text-on-surface-variant font-medium">
+              Editado por última vez por <strong>Admin</strong>
+            </span>
           </div>
-        </div>
+          <div className="flex gap-4">
+            <button
+              onClick={onClose}
+              disabled={actionLoading}
+              className="px-8 py-3 rounded-xl border border-outline-variant font-semibold text-on-surface hover:bg-surface-container-highest transition-all duration-200 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={actionLoading}
+              className="px-10 py-3 rounded-xl bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>save</span>
+              {actionLoading ? 'Salvando...' : 'Salvar Agente'}
+            </button>
+          </div>
+        </footer>
       </div>
     </div>
   );

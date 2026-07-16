@@ -288,37 +288,46 @@ export class ChatUsecasesImpl implements ChatUsecases {
       }
     }
 
-    // ── 5) Inject system events (human takeover, finalization) ─────────────────
+    // ── 5) Inject system events (creation date from lead + physical lead_history log changes) ─────────────────
     const systemEvents: any[] = [];
 
-    const isHuman = lead.status === 'HUMANO';
-    const isFinalized = lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO';
-
-    if ((isHuman || isFinalized) && lead.taken_over_at) {
+    if (lead.created_at) {
       systemEvents.push({
-        id: `system-human-${lead.id}`,
+        id: `system-created-${lead.id}`,
         type: 'system_event',
-        event: 'human_takeover',
-        content: lead.taken_motive
-          ? `🔁 Atendimento humano — ${lead.taken_motive}`
-          : '🔁 Atendimento humano iniciado',
+        event: 'lead_created',
+        content: 'Lead criado no sistema',
         role: 'system_event',
-        createdAt: new Date(lead.taken_over_at),
+        createdAt: new Date(lead.created_at),
       });
     }
 
-    if (isFinalized) {
-      systemEvents.push({
-        id: `system-finalized-${lead.id}`,
-        type: 'system_event',
-        event: 'lead_finalized',
-        content: lead.status === 'CONCLUIDO'
-          ? '✅ Atendimento concluído'
-          : '✅ Atendimento finalizado',
-        role: 'system_event',
-        createdAt: lead.updated_at ? new Date(lead.updated_at) : new Date(),
-      });
-    }
+    // Query physical lead_history table logs
+    try {
+      const historyLogs = await this.db.getLeadHistoryChanges(leadId);
+      for (const log of historyLogs) {
+        const who = log.changed_by_agent 
+          ? `Agente ${log.agent_name || 'IA'}`
+          : (log.user_name ? log.user_name : 'Sistema');
+        
+        const fieldMap: Record<string, string> = {
+          'status': 'Status',
+          'value': 'Valor Estimado',
+          'agent_id': 'Agente Responsável',
+          'name': 'Nome do Lead'
+        };
+        const fieldName = fieldMap[log.field_name] || log.field_name;
+
+        systemEvents.push({
+          id: `log-change-${log.id}`,
+          type: 'system_event',
+          event: 'field_change',
+          content: `Alteração de ${fieldName}: de "${log.old_value || '-'}" para "${log.new_value || '-'}" por ${who}`,
+          role: 'system_event',
+          createdAt: new Date(log.created_at),
+        });
+      }
+    } catch (_) {}
 
     // ── 6) Merge standard messages + tool events + system events, sort chronologically ──
     const combined = [
@@ -408,7 +417,6 @@ export class ChatUsecasesImpl implements ChatUsecases {
 
     const messageId = response?.key?.id || response?.message?.key?.id || `platform-${Date.now()}`;
 
-    // Persist in DB
     const savedMsg = await this.db.createMessage({
       agent_id: lead.agent_id,
       session_id: lead.session_id || lead.remote_jid_alt,
@@ -418,7 +426,8 @@ export class ChatUsecasesImpl implements ChatUsecases {
       remote_jid: lead.remote_jid_alt,
       message_type: options?.messageType || 'text',
       message_id: messageId,
-      quote_message_content: quotedText
+      quote_message_content: quotedText,
+      user_id: user.userId,
     });
 
     if (lead.status === 'NOVO') {

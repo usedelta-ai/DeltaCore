@@ -51,7 +51,30 @@ export class LeadUsecasesImpl implements LeadUsecases {
     if (lead.agent_id !== undefined) {
       await this.checkCompanyAccessByAgent(user, lead.agent_id);
     }
-    return this.db.updateLead(id, lead);
+    
+    const updated = await this.db.updateLead(id, lead);
+
+    // Mapeia e insere as mudanças de campos na tabela lead_history
+    const fieldsToTrack: (keyof Lead)[] = ['status', 'value', 'agent_id', 'name'];
+    for (const field of fieldsToTrack) {
+      if (lead[field] !== undefined && String(lead[field]) !== String(existing[field])) {
+        try {
+          await this.db.insertLeadHistoryLog({
+            lead_id: id,
+            user_id: user.userId,
+            agent_id: existing.agent_id,
+            changed_by_agent: false,
+            field_name: field,
+            old_value: existing[field] ? String(existing[field]) : null,
+            new_value: lead[field] ? String(lead[field]) : null
+          });
+        } catch (e) {
+          console.error(`Erro ao salvar log de histórico de alteração do lead:`, e);
+        }
+      }
+    }
+
+    return updated;
   }
 
   async deleteLead(user: UserSession, id: number): Promise<boolean> {

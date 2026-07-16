@@ -496,8 +496,9 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
   const handleQuickAssume = async () => {
     if (!selectedLeadForModal) return;
     try {
-      await updateLead(selectedLeadForModal.id, { status: 'HUMANO' });
-      setSelectedLeadForModal(prev => prev ? { ...prev, status: 'HUMANO' as const } : null);
+      const motive = `Assumido por ${userName || 'Atendente'}`;
+      await updateLead(selectedLeadForModal.id, { status: 'HUMANO', taken_motive: motive });
+      setSelectedLeadForModal(prev => prev ? { ...prev, status: 'HUMANO' as const, taken_motive: motive } : null);
     } catch (err: any) {
       alert('Erro ao assumir atendimento: ' + err.message);
     }
@@ -507,8 +508,9 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     if (!selectedLeadForModal) return;
     if (!confirm('Tem certeza que deseja cancelar este atendimento?')) return;
     try {
-      await updateLead(selectedLeadForModal.id, { status: 'CANCELADO' });
-      setSelectedLeadForModal(prev => prev ? { ...prev, status: 'CANCELADO' as const } : null);
+      const motive = `Cancelado por ${userName || 'Atendente'}`;
+      await updateLead(selectedLeadForModal.id, { status: 'CANCELADO', taken_motive: motive });
+      setSelectedLeadForModal(prev => prev ? { ...prev, status: 'CANCELADO' as const, taken_motive: motive } : null);
     } catch (err: any) {
       alert('Erro ao cancelar atendimento: ' + err.message);
     }
@@ -518,14 +520,17 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     if (!selectedLeadForModal) return;
     setFinalizationLoading(true);
     try {
-      const updateData: Partial<Lead> = { status: 'FINALIZADO' };
+      const targetStatus = hadSale ? 'CONCLUIDO' : 'FINALIZADO';
+      const motive = `${hadSale ? 'Concluído com venda' : 'Finalizado sem venda'} por ${userName || 'Atendente'}`;
+      const updateData: Partial<Lead> = { status: targetStatus, taken_motive: motive };
       if (hadSale && value !== undefined) {
         updateData.value = value;
       }
       await updateLead(selectedLeadForModal.id, updateData);
       setSelectedLeadForModal(prev => prev ? {
         ...prev,
-        status: 'FINALIZADO' as const,
+        status: targetStatus,
+        taken_motive: motive,
         ...(hadSale && value !== undefined ? { value } : {}),
       } : null);
       setShowFinalizationModal(false);
@@ -737,10 +742,19 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     if (!isNaN(leadId)) {
       try {
         const leadStatusVal = status as LeadStatus;
-        await updateLead(leadId, { status: leadStatusVal });
+        const statusMap: Record<string, string> = {
+          'NOVO': 'Novo Lead',
+          'HUMANO': 'Em Atendimento',
+          'FINALIZADO': 'Finalizado',
+          'CONCLUIDO': 'Faturado',
+          'CANCELADO': 'Cancelado'
+        };
+        const statusText = statusMap[leadStatusVal] || leadStatusVal;
+        const motive = `Alterado para ${statusText} via Kanban por ${userName || 'Atendente'}`;
+        await updateLead(leadId, { status: leadStatusVal, taken_motive: motive });
         // Update modal status if open and matched
         if (selectedLeadForModal && selectedLeadForModal.id === leadId) {
-          setSelectedLeadForModal(prev => prev ? { ...prev, status: leadStatusVal } : null);
+          setSelectedLeadForModal(prev => prev ? { ...prev, status: leadStatusVal, taken_motive: motive } : null);
         }
       } catch (err) {
         console.error('Erro ao atualizar status do lead:', err);
@@ -838,7 +852,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                     <td>{ld.name || 'Sem nome'}</td>
                     <td>{ld.remote_jid_alt}</td>
                     <td>{ld.agent_name || 'Sem agente'}</td>
-                    <td><Badge status={ld.status} /></td>
+                    <td><Badge variant="primary">{ld.status}</Badge></td>
                     <td>{ld.value ? formatCurrency(ld.value) : '-'}</td>
                     <td>
                       <button className="btn btn-ghost btn-sm" onClick={() => setSelectedLeadForModal(ld)}>

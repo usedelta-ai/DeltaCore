@@ -89,6 +89,7 @@ export const messages = pgTable('messages', {
   message_type: varchar('message_type', { length: 50 }).notNull(),
   message_id: varchar('message_id', { length: 255 }).notNull(),
   quote_message_content: text('quote_message_content'),
+  user_id: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 

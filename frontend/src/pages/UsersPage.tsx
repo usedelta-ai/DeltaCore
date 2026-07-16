@@ -1,19 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import type { User, Empresa } from '../services/api';
-import { Pencil, Trash2, UserPlus, ShieldAlert, Eye, EyeOff } from 'lucide-react';
+import { ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { ConfirmationModal } from '../components/Modal';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
+import { FormInput } from '../components/ui/FormInput';
+import { Modal } from '../components/ui/Modal';
 
 interface UsersPageProps {
   empresas: Empresa[];
 }
+
+const roleBadgeVariant: Record<string, 'danger' | 'warning' | 'info'> = {
+  superadmin: 'danger',
+  manager: 'warning',
+  employee: 'info',
+};
+
+const roleLabel: Record<string, string> = {
+  superadmin: 'Super Admin',
+  manager: 'Gerente',
+  employee: 'Funcionário',
+};
 
 export const UsersPage: React.FC<UsersPageProps> = ({ empresas }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [userName, setUserName] = useState('');
@@ -25,7 +40,6 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas }) => {
   const [userActive, setUserActive] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Delete modal
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: number; name: string }>({
     isOpen: false,
     id: 0,
@@ -66,7 +80,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas }) => {
     setEditingId(user.id);
     setUserName(user.name);
     setUserEmail(user.email);
-    setUserPassword(''); // Leave empty to keep unchanged
+    setUserPassword('');
     setShowPassword(false);
     setUserRole(user.role);
     setUserEmpresaId(user.empresa_id ? String(user.empresa_id) : '');
@@ -85,7 +99,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas }) => {
       email: userEmail,
       role: userRole,
       empresa_id: userRole === 'superadmin' ? null : (userEmpresaId ? Number(userEmpresaId) : null),
-      active: userActive
+      active: userActive,
     };
 
     if (userPassword) {
@@ -114,7 +128,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas }) => {
     setDeleteModal({ isOpen: true, id, name });
   };
 
-  const handleDelete = async () => {
+  const handleDeleteUser = async () => {
     setActionLoading(true);
     try {
       await api.deleteUser(deleteModal.id);
@@ -129,67 +143,59 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas }) => {
 
   return (
     <>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        {/* Header Action */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button className="btn btn-primary" onClick={openCreateForm}>
-            <UserPlus size={16} /> Novo Usuário
-          </button>
+      <div className="flex flex-col gap-6">
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={openCreateForm}>
+            Novo Usuário
+          </Button>
         </div>
 
         {error && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-            backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)',
-            color: '#ef4444', padding: '16px', borderRadius: 'var(--radius)'
-          }}>
+          <div className="flex items-center gap-3 bg-status-critical/10 border border-status-critical/20 text-status-critical px-4 py-3 rounded-xl">
             <ShieldAlert size={20} />
-            <span>{error}</span>
+            <span className="text-body-sm">{error}</span>
           </div>
         )}
 
-        {/* Users Table */}
         {loading ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--muted-foreground))' }}>Carregando usuários...</div>
+          <div className="py-10 text-center text-on-surface-variant">Carregando usuários...</div>
         ) : (
-          <div className="table-container">
-            <table className="custom-table">
+          <div className="overflow-x-auto rounded-xl border border-border-low-contrast bg-white">
+            <table className="w-full border-collapse">
               <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>E-mail</th>
-                  <th>Papel</th>
-                  <th>Empresa Vinculada</th>
-                  <th>Status</th>
-                  <th>Ações</th>
+                <tr className="bg-surface-subtle border-b border-border-low-contrast">
+                  <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Nome</th>
+                  <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">E-mail</th>
+                  <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Papel</th>
+                  <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Empresa Vinculada</th>
+                  <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Status</th>
+                  <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map(u => {
                   const company = empresas.find(e => e.id === u.empresa_id);
                   return (
-                    <tr key={u.id}>
-                      <td style={{ fontWeight: 600 }}>{u.name}</td>
-                      <td>{u.email}</td>
-                      <td>
-                        <span className={`badge ${u.role === 'superadmin' ? 'badge-danger' : u.role === 'manager' ? 'badge-warning' : 'badge-info'}`}>
-                          {u.role === 'superadmin' ? 'Super Admin' : u.role === 'manager' ? 'Gerente' : 'Funcionário'}
-                        </span>
+                    <tr key={u.id} className="border-b border-border-low-contrast/50 hover:bg-surface-subtle transition-colors">
+                      <td className="px-4 py-3 text-body-sm font-semibold text-on-surface">{u.name}</td>
+                      <td className="px-4 py-3 text-body-sm text-on-surface-variant">{u.email}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={roleBadgeVariant[u.role]}>{roleLabel[u.role]}</Badge>
                       </td>
-                      <td>{company ? company.name : <em style={{ color: 'hsl(var(--muted-foreground))' }}>Geral (Sem vínculo)</em>}</td>
-                      <td>
-                        <span className={`badge ${u.active ? 'badge-success' : 'badge-danger'}`}>
-                          {u.active ? 'Ativo' : 'Inativo'}
-                        </span>
+                      <td className="px-4 py-3 text-body-sm text-on-surface-variant">
+                        {company ? company.name : <em className="text-muted-foreground">Geral (Sem vínculo)</em>}
                       </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => openEditForm(u)}>
-                            <Pencil size={12} /> Editar
-                          </button>
-                          <button className="btn btn-danger btn-sm" onClick={() => confirmDelete(u.id, u.name)}>
-                            <Trash2 size={12} /> Excluir
-                          </button>
+                      <td className="px-4 py-3">
+                        <Badge variant={u.active ? 'success' : 'danger'}>{u.active ? 'Ativo' : 'Inativo'}</Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="secondary" onClick={() => openEditForm(u)}>
+                            Editar
+                          </Button>
+                          <Button size="sm" variant="danger" onClick={() => confirmDelete(u.id, u.name)}>
+                            Excluir
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -197,7 +203,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas }) => {
                 })}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'hsl(var(--muted-foreground))' }}>
+                    <td colSpan={6} className="text-center py-6 text-on-surface-variant">
                       Nenhum usuário cadastrado
                     </td>
                   </tr>
@@ -208,178 +214,128 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas }) => {
         )}
       </div>
 
-      {/* Create / Edit Modal */}
       {isFormOpen && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
-          backgroundColor: 'rgba(9, 10, 12, 0.85)',
-          backdropFilter: 'blur(12px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '20px',
-        }}>
-          <div style={{
-            width: '100%', maxWidth: '560px',
-            background: 'hsl(var(--card))',
-            border: '1px solid hsl(var(--card-border))',
-            borderRadius: '20px',
-            boxShadow: '0 24px 60px rgba(0,0,0,0.15)',
-            display: 'flex', flexDirection: 'column',
-            overflow: 'hidden',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid hsl(var(--card-border))' }}>
-              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>
-                {editingId ? 'Editar' : 'Novo'} Usuário
-              </h2>
-              <button onClick={() => setIsFormOpen(false)} className="btn-ghost" style={{
-                width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '18px',
-                color: 'hsl(var(--muted-foreground))', background: 'transparent',
-              }}>✕</button>
+        <Modal
+          isOpen={isFormOpen}
+          onClose={() => setIsFormOpen(false)}
+          title={`${editingId ? 'Editar' : 'Novo'} Usuário`}
+        >
+          <form onSubmit={handleSave} className="flex flex-col gap-5 p-6">
+            <FormInput
+              label="Nome Completo"
+              placeholder="Ex: João Silva"
+              value={userName}
+              onChange={e => setUserName(e.target.value)}
+              required
+              disabled={actionLoading}
+            />
+            <FormInput
+              label="E-mail (Login)"
+              type="email"
+              placeholder="Ex: joao@exemplo.com"
+              value={userEmail}
+              onChange={e => setUserEmail(e.target.value)}
+              required
+              disabled={actionLoading}
+            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-label-md font-label-md text-on-surface-variant">
+                {editingId ? 'Nova Senha (deixe em branco para manter)' : 'Senha'}
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="w-full px-3.5 py-3 text-body-sm rounded-xl border border-border-low-contrast bg-white text-on-surface placeholder:text-on-surface-variant/50 outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/10 pr-12"
+                  placeholder={editingId ? '••••••••' : 'Mínimo 6 caracteres'}
+                  value={userPassword}
+                  onChange={e => setUserPassword(e.target.value)}
+                  required={!editingId}
+                  disabled={actionLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant cursor-pointer border-none bg-none p-2 flex items-center"
+                  disabled={actionLoading}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px' }}>
-              <div className="form-group">
-                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Nome Completo</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Ex: João Silva"
-                  value={userName}
-                  onChange={e => setUserName(e.target.value)}
-                  required disabled={actionLoading}
-                  style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
-                />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-label-md font-label-md text-on-surface-variant">Papel</label>
+                <select
+                  className="px-3.5 py-3 text-body-sm rounded-xl border border-border-low-contrast bg-white text-on-surface outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                  value={userRole}
+                  onChange={e => setUserRole(e.target.value as any)}
+                  disabled={actionLoading}
+                >
+                  <option value="superadmin">Super Admin</option>
+                  <option value="manager">Gerente</option>
+                  <option value="employee">Funcionário</option>
+                </select>
               </div>
 
-              <div className="form-group">
-                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>E-mail (Login)</label>
-                <input
-                  type="email"
-                  className="form-control"
-                  placeholder="Ex: joao@exemplo.com"
-                  value={userEmail}
-                  onChange={e => setUserEmail(e.target.value)}
-                  required disabled={actionLoading}
-                  style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
-                />
-              </div>
-
-              <div className="form-group">
-                <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>
-                  {editingId ? 'Nova Senha (deixe em branco para manter)' : 'Senha'}
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    className="form-control"
-                    placeholder={editingId ? '••••••••' : 'Mínimo 6 caracteres'}
-                    value={userPassword}
-                    onChange={e => setUserPassword(e.target.value)}
-                    required={!editingId}
-                    disabled={actionLoading}
-                    style={{ padding: '12px 48px 12px 14px', fontSize: '14px', borderRadius: '10px' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute', right: '12px', top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: 'hsl(var(--muted-foreground))',
-                      cursor: 'pointer', border: 'none', background: 'none',
-                      display: 'flex', alignItems: 'center', padding: '8px',
-                    }}
-                    disabled={actionLoading}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Papel</label>
+              {userRole !== 'superadmin' ? (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-label-md font-label-md text-on-surface-variant">Empresa</label>
                   <select
-                    className="form-control"
-                    value={userRole}
-                    onChange={e => setUserRole(e.target.value as any)}
+                    className="px-3.5 py-3 text-body-sm rounded-xl border border-border-low-contrast bg-white text-on-surface outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/10"
+                    value={userEmpresaId}
+                    onChange={e => setUserEmpresaId(e.target.value)}
                     disabled={actionLoading}
-                    style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
                   >
-                    <option value="superadmin">Super Admin</option>
-                    <option value="manager">Gerente</option>
-                    <option value="employee">Funcionário</option>
+                    <option value="">Selecione...</option>
+                    {empresas.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.name}</option>
+                    ))}
                   </select>
                 </div>
-
-                {userRole !== 'superadmin' ? (
-                  <div className="form-group">
-                    <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Empresa</label>
-                    <select
-                      className="form-control"
-                      value={userEmpresaId}
-                      onChange={e => setUserEmpresaId(e.target.value)}
-                      disabled={actionLoading}
-                      style={{ padding: '12px 14px', fontSize: '14px', borderRadius: '10px' }}
-                    >
-                      <option value="">Selecione...</option>
-                      {empresas.map(emp => (
-                        <option key={emp.id} value={emp.id}>{emp.name}</option>
-                      ))}
-                    </select>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-label-md font-label-md text-on-surface-variant">Empresa</label>
+                  <div className="px-3.5 py-3 text-body-sm rounded-xl border border-border-low-contrast bg-surface-subtle text-on-surface-variant">
+                    Acesso global (sem vínculo)
                   </div>
-                ) : (
-                  <div className="form-group">
-                    <label style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px', display: 'block' }}>Empresa</label>
-                    <div style={{
-                      padding: '12px 14px', fontSize: '14px', borderRadius: '10px',
-                      background: 'hsl(var(--background))',
-                      color: 'hsl(var(--muted-foreground))',
-                      border: '1px solid hsl(var(--card-border))',
-                    }}>
-                      Acesso global (sem vínculo)
-                    </div>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
 
-              <label style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                padding: '12px 16px', borderRadius: '10px',
-                background: 'hsl(var(--background))',
-                border: '1px solid hsl(var(--card-border))',
-                cursor: 'pointer', margin: 0,
-              }}>
-                <input
-                  type="checkbox"
-                  checked={userActive}
-                  onChange={e => setUserActive(e.target.checked)}
-                  disabled={actionLoading}
-                  style={{ width: '18px', height: '18px', accentColor: 'hsl(var(--primary))' }}
-                />
-                <span style={{ fontSize: '14px', fontWeight: 500 }}>Usuário Ativo</span>
-              </label>
+            <label className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-surface-subtle border border-border-low-contrast cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={userActive}
+                onChange={e => setUserActive(e.target.checked)}
+                disabled={actionLoading}
+                className="w-[18px] h-[18px] accent-primary rounded"
+              />
+              <span className="text-body-sm font-label-md text-on-surface">Usuário Ativo</span>
+            </label>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid hsl(var(--card-border))', paddingTop: '20px', marginTop: '4px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}
-                  style={{ padding: '10px 20px', borderRadius: '10px' }}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={actionLoading}
-                  style={{ padding: '10px 20px', borderRadius: '10px' }}>Salvar</button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex justify-end gap-2.5 border-t border-border-low-contrast pt-5 mt-1">
+              <Button type="button" variant="secondary" onClick={() => setIsFormOpen(false)} disabled={actionLoading}>
+                Cancelar
+              </Button>
+              <Button type="submit" variant="primary" disabled={actionLoading}>
+                {actionLoading ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
 
-      {/* Delete Confirmation */}
-      <ConfirmationModal
-        isOpen={deleteModal.isOpen}
-        title="Excluir Usuário"
-        description={`Tem certeza que deseja inativar o usuário "${deleteModal.name}"?`}
-        onConfirm={handleDelete}
-        onClose={() => setDeleteModal({ isOpen: false, id: 0, name: '' })}
-        disabled={actionLoading}
-      />
+      {deleteModal.isOpen && (
+        <ConfirmationModal
+          isOpen={deleteModal.isOpen}
+          title="Excluir Usuário"
+          description={`Tem certeza que deseja excluir o usuário "${deleteModal.name}"?`}
+          onConfirm={handleDeleteUser}
+          onClose={() => setDeleteModal({ isOpen: false, id: 0, name: '' })}
+          disabled={actionLoading}
+        />
+      )}
     </>
   );
 };

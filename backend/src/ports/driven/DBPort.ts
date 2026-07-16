@@ -47,6 +47,7 @@ export interface DBPort {
     message_type: string;
     message_id: string;
     quote_message_content?: string;
+    user_id?: number;
   }): Promise<any>;
 
   // Users
@@ -55,4 +56,16 @@ export interface DBPort {
   createUser(user: Omit<User, 'id'>): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User>;
   deleteUser(id: number): Promise<boolean>;
+
+  // Lead History log
+  getLeadHistoryChanges(leadId: number): Promise<any[]>;
+  insertLeadHistoryLog(log: {
+    lead_id: number;
+    user_id?: number | null;
+    agent_id?: number | null;
+    changed_by_agent: boolean;
+    field_name: string;
+    old_value: string | null;
+    new_value: string | null;
+  }): Promise<void>;
 }
