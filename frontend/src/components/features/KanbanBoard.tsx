@@ -5,7 +5,7 @@ import type { LeadCardData } from './LeadCard';
 interface ColumnDef {
   id: string;
   title: string;
-  dotColor: 'ai' | 'human' | 'success';
+  dotColor: 'ai' | 'human' | 'success' | 'purple';
   leads: LeadCardData[];
   emptyIcon?: string;
   onCardClick?: (id: number) => void;

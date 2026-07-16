@@ -5,7 +5,7 @@ import type { LeadCardData } from './LeadCard';
 interface KanbanColumnProps {
   title: string;
   count: number;
-  dotColor: 'ai' | 'human' | 'success';
+  dotColor: 'ai' | 'human' | 'success' | 'purple';
   leads: LeadCardData[];
   emptyIcon?: string;
   onCardClick?: (id: number) => void;
@@ -18,9 +18,10 @@ interface KanbanColumnProps {
 }
 
 const dotColors: Record<string, string> = {
-  ai: 'bg-ai-accent animate-pulse',
+  ai: 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)] animate-pulse',
   human: 'bg-secondary',
   success: 'bg-status-success',
+  purple: 'bg-primary-container shadow-[0_0_8px_rgba(88,43,232,0.6)]',
 };
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({

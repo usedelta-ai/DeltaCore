@@ -10,7 +10,7 @@ export function mapLeadToCardData(lead: Lead, agents: Agent[]): LeadCardData {
   let badgeLabel = 'WARM';
   let timeAgo = formatTimeAgo(lead.created_at);
   let avatarLabel = '';
-  let avatarType: 'ai' | 'human' = 'human';
+  let avatarType: 'ai' | 'human' | 'finished' | 'billed' = 'human';
   let avatarSrc: string | undefined;
 
   if (lead.status === 'NOVO') {
@@ -40,7 +40,7 @@ export function mapLeadToCardData(lead: Lead, agents: Agent[]): LeadCardData {
     }
     avatarType = 'human';
   } else if (lead.status === 'CONCLUIDO') {
-    type = 'finished';
+    type = 'billed';
     badgeVariant = 'invoiced';
     badgeLabel = 'FATURADO';
     if (lead.name) {

@@ -5,7 +5,7 @@ export interface LeadCardData {
   name: string;
   company: string;
   badge: { label: string; variant: string };
-  type: 'ai' | 'human' | 'finished';
+  type: 'ai' | 'human' | 'finished' | 'billed';
   timeAgo: string;
   avatarLabel: string;
   avatarType: 'ai' | 'human';
@@ -31,11 +31,11 @@ const badgeStyles: Record<string, string> = {
 
 const typeConfig = {
   ai: {
-    leftBorder: 'bg-ai-accent',
+    leftBorder: 'bg-blue-500',
     icon: 'smart_toy',
-    iconColor: 'text-ai-accent',
+    iconColor: 'text-blue-500',
     opacity: '',
-    glow: 'card-glow-ai shadow-[0_0_15px_rgba(88,43,232,0.1)]',
+    glow: 'card-glow-ai shadow-[0_0_15px_rgba(59,130,246,0.15)]',
   },
   human: {
     leftBorder: 'bg-secondary',
@@ -45,18 +45,25 @@ const typeConfig = {
     glow: '',
   },
   finished: {
-    leftBorder: 'bg-status-success',
+    leftBorder: 'bg-primary',
     icon: 'check_circle',
-    iconColor: 'text-status-success',
+    iconColor: 'text-primary',
     opacity: 'opacity-75',
-    glow: '',
+    glow: 'shadow-[0_0_10px_rgba(88,43,232,0.08)]',
+  },
+  billed: {
+    leftBorder: 'bg-status-success',
+    icon: 'receipt_long',
+    iconColor: 'text-status-success',
+    opacity: '',
+    glow: 'shadow-[0_0_10px_rgba(34,197,94,0.1)]',
   },
 };
 
 export const LeadCard: React.FC<LeadCardProps> = ({ lead, onCardClick, onDragStart }) => {
   const type = typeConfig[lead.type];
   const badgeClass = badgeStyles[lead.badge.variant] || 'bg-surface-container-highest text-on-surface-variant';
-  const avatarBg = lead.avatarType === 'ai' ? 'bg-ai-accent' : 'bg-secondary';
+  const avatarBg = lead.avatarType === 'ai' ? 'bg-blue-500' : 'bg-secondary';
 
   return (
     <div

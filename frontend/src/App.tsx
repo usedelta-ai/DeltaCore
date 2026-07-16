@@ -717,6 +717,7 @@ export default function App() {
             agents={agents}
             empresas={empresas}
             updateLead={updateLead}
+            onRefresh={refetchLeads}
             filterEmpresaId={filterEmpresaId}
             filterAgentId={filterAgentId}
             onFilterEmpresaChange={setFilterEmpresaId}
