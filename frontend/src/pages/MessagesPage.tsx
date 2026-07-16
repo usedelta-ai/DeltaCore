@@ -43,6 +43,8 @@ export function cleanMessageContent(content: string): string {
   cleaned = cleaned.replace(/<agentMsg>([\s\S]*?)<\/agentMsg>/gi, '$1');
   cleaned = cleaned.replace(/<assistantMsg>([\s\S]*?)<\/assistantMsg>/gi, '$1');
   cleaned = cleaned.replace(/<systemMsg>([\s\S]*?)<\/systemMsg>/gi, '$1');
+  cleaned = cleaned.replace(/<transcription>([\s\S]*?)<\/transcription>/gi, '$1');
+  cleaned = cleaned.replace(/<transcricao>([\s\S]*?)<\/transcricao>/gi, '$1');
   return cleaned.trim();
 }
 

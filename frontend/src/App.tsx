@@ -4,7 +4,7 @@ import {
   MessageSquare, Plus, AlertCircle, UserCheck, Menu, UserCog
 } from 'lucide-react';
 import { api } from './services/api';
-import type { Agent, ChatMessage, Lead } from './services/api';
+import type { Agent, ChatMessage, Lead, LeadStatus } from './services/api';
 import { SkeletonView } from './components/ui/SkeletonView';
 import { LoginScreen } from './components/features/LoginScreen';
 
@@ -493,7 +493,7 @@ export default function App() {
         const payload = {
           agent_id: leadAgentId, remote_jid_alt: leadRemoteJid, name: leadName || null,
           custom_properties: JSON.parse(leadCustomProperties || '{}'),
-          status: leadStatus, value: leadValue ? Number(leadValue) : null,
+          status: leadStatus as LeadStatus, value: leadValue ? Number(leadValue) : null,
           taken_motive: leadTakenMotive || null, follow_up_id: leadFollowUpId,
           session_id: leadSessionId || null
         };

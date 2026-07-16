@@ -10,6 +10,34 @@ interface MediaMessageRendererProps {
   whatsAppMessageId?: string;
 }
 
+const getTranscription = (text: string) => {
+  if (!text) return '';
+  const match = text.match(/<([^>]+)>([\s\S]*?)<\/\1>/);
+  if (match && match[2]) {
+    return match[2].trim();
+  }
+  const openMatch = text.match(/<[^>]+>([\s\S]*)/);
+  if (openMatch && openMatch[1]) {
+    return openMatch[1].trim();
+  }
+
+  const lowerText = text.trim().toLowerCase();
+  if (
+    lowerText.startsWith('data:') ||
+    lowerText.startsWith('http://') ||
+    lowerText.startsWith('https://') ||
+    lowerText.match(/\.(ogg|mp3|wav|m4a|mp4|webm|bin)$/i) ||
+    lowerText === 'audio.ogg' ||
+    lowerText === 'audio.webm' ||
+    lowerText === 'audio.mp4' ||
+    lowerText === 'audio.mp3' ||
+    lowerText === 'audio'
+  ) {
+    return '';
+  }
+  return text.trim();
+};
+
 export const MediaMessageRenderer: React.FC<MediaMessageRendererProps> = ({ messageId, messageType, content, instanceName, whatsAppMessageId }) => {
   const normalizedType = messageType.replace(/Message$/, '');
   const [mediaData, setMediaData] = React.useState<string | null>(null);
@@ -204,10 +232,38 @@ export const MediaMessageRenderer: React.FC<MediaMessageRendererProps> = ({ mess
   }
 
   if (error || !mediaData) {
+    if (normalizedType === 'audio') {
+      const transcription = getTranscription(content);
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <span style={{ fontSize: '12px', color: '#ef4444' }}>⚠️ Áudio indisponível</span>
+          {transcription && (
+            <div style={{
+              fontSize: '13px',
+              color: 'hsl(var(--muted-foreground))',
+              fontStyle: 'italic',
+              borderLeft: '3px solid hsl(var(--primary))',
+              paddingLeft: '8px',
+              marginTop: '2px',
+              backgroundColor: 'rgba(0, 0, 0, 0.03)',
+              padding: '6px 10px',
+              borderRadius: '0 4px 4px 0',
+              maxWidth: '100%',
+              wordBreak: 'break-word',
+              boxSizing: 'border-box'
+            }}>
+              "{transcription}"
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const cleanContent = content ? content.replace(/<[^>]*>/g, '').trim() : '';
     return (
       <div>
         <span style={{ fontSize: '12px', color: '#ef4444' }}>⚠️ Falha ao carregar mídia</span>
-        {content && <p style={{ fontSize: '13px', marginTop: '4px' }}>{content}</p>}
+        {cleanContent && <p style={{ fontSize: '13px', marginTop: '4px' }}>{cleanContent}</p>}
       </div>
     );
   }
@@ -310,74 +366,96 @@ export const MediaMessageRenderer: React.FC<MediaMessageRendererProps> = ({ mess
     return <img src={mediaData} alt="Sticker" style={{ width: '120px', height: '120px', objectFit: 'contain' }} />;
   }
   if (detectedType === 'audio') {
+    const transcription = getTranscription(content);
+
     return (
-      <div className="wpp-audio-player">
-        <div className="wpp-audio-player-left">
-          <button
-            className="wpp-audio-player-play-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              const audio = e.currentTarget.parentElement?.parentElement?.querySelector('audio') as HTMLAudioElement;
-              if (!audio) return;
-              if (audio.paused) {
-                audio.play();
-              } else {
-                audio.pause();
+      <>
+        <div className="wpp-audio-player">
+          <div className="wpp-audio-player-left">
+            <button
+              className="wpp-audio-player-play-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                const audio = e.currentTarget.parentElement?.parentElement?.querySelector('audio') as HTMLAudioElement;
+                if (!audio) return;
+                if (audio.paused) {
+                  audio.play();
+                } else {
+                  audio.pause();
+                }
+              }}
+            >
+              ▶
+            </button>
+          </div>
+          <div className="wpp-audio-player-wave">
+            <div className="wpp-audio-player-progress-track">
+              <div className="wpp-audio-player-progress-fill" style={{ width: '0%' }} />
+            </div>
+            <div className="wpp-audio-player-bars">
+              {Array.from({ length: 30 }).map((_, i) => {
+                const h = 15 + Math.sin(i * 0.8) * 25 + Math.random() * 15;
+                return <div key={i} className="wpp-audio-player-bar" style={{ height: `${h}%` }} />;
+              })}
+            </div>
+          </div>
+          <span className="wpp-audio-player-time">0:00</span>
+          <audio
+            src={mediaData}
+            preload="metadata"
+            style={{ display: 'none' }}
+            onLoadedMetadata={(e) => {
+              const audio = e.currentTarget;
+              const totalSec = Math.floor(audio.duration);
+              const timeEl = audio.parentElement?.querySelector('.wpp-audio-player-time');
+              if (timeEl) timeEl.textContent = `${Math.floor(totalSec / 60)}:${(totalSec % 60).toString().padStart(2, '0')}`;
+            }}
+            onTimeUpdate={(e) => {
+              const audio = e.currentTarget;
+              const pct = (audio.currentTime / audio.duration) * 100;
+              const fill = audio.parentElement?.querySelector('.wpp-audio-player-progress-fill') as HTMLElement;
+              if (fill) fill.style.width = `${pct}%`;
+              const timeEl = audio.parentElement?.querySelector('.wpp-audio-player-time');
+              if (timeEl) {
+                const sec = Math.floor(audio.currentTime);
+                timeEl.textContent = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`;
               }
             }}
-          >
-            ▶
-          </button>
+            onPlay={(e) => {
+              const btn = e.currentTarget.parentElement?.querySelector('.wpp-audio-player-play-btn');
+              if (btn) btn.textContent = '⏸';
+            }}
+            onPause={(e) => {
+              const btn = e.currentTarget.parentElement?.querySelector('.wpp-audio-player-play-btn');
+              if (btn) btn.textContent = '▶';
+            }}
+            onEnded={(e) => {
+              const btn = e.currentTarget.parentElement?.querySelector('.wpp-audio-player-play-btn');
+              if (btn) btn.textContent = '▶';
+              const fill = e.currentTarget.parentElement?.querySelector('.wpp-audio-player-progress-fill') as HTMLElement;
+              if (fill) fill.style.width = '0%';
+            }}
+          />
         </div>
-        <div className="wpp-audio-player-wave">
-          <div className="wpp-audio-player-progress-track">
-            <div className="wpp-audio-player-progress-fill" style={{ width: '0%' }} />
+        {transcription && (
+          <div style={{
+            fontSize: '13px',
+            color: 'hsl(var(--muted-foreground))',
+            fontStyle: 'italic',
+            borderLeft: '3px solid hsl(var(--primary))',
+            paddingLeft: '8px',
+            marginTop: '6px',
+            backgroundColor: 'rgba(0, 0, 0, 0.03)',
+            padding: '6px 10px',
+            borderRadius: '0 4px 4px 0',
+            maxWidth: '100%',
+            wordBreak: 'break-word',
+            boxSizing: 'border-box'
+          }}>
+            "{transcription}"
           </div>
-          <div className="wpp-audio-player-bars">
-            {Array.from({ length: 30 }).map((_, i) => {
-              const h = 15 + Math.sin(i * 0.8) * 25 + Math.random() * 15;
-              return <div key={i} className="wpp-audio-player-bar" style={{ height: `${h}%` }} />;
-            })}
-          </div>
-        </div>
-        <span className="wpp-audio-player-time">0:00</span>
-        <audio
-          src={mediaData}
-          preload="metadata"
-          style={{ display: 'none' }}
-          onLoadedMetadata={(e) => {
-            const audio = e.currentTarget;
-            const totalSec = Math.floor(audio.duration);
-            const timeEl = audio.parentElement?.querySelector('.wpp-audio-player-time');
-            if (timeEl) timeEl.textContent = `${Math.floor(totalSec / 60)}:${(totalSec % 60).toString().padStart(2, '0')}`;
-          }}
-          onTimeUpdate={(e) => {
-            const audio = e.currentTarget;
-            const pct = (audio.currentTime / audio.duration) * 100;
-            const fill = audio.parentElement?.querySelector('.wpp-audio-player-progress-fill') as HTMLElement;
-            if (fill) fill.style.width = `${pct}%`;
-            const timeEl = audio.parentElement?.querySelector('.wpp-audio-player-time');
-            if (timeEl) {
-              const sec = Math.floor(audio.currentTime);
-              timeEl.textContent = `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`;
-            }
-          }}
-          onPlay={(e) => {
-            const btn = e.currentTarget.parentElement?.querySelector('.wpp-audio-player-play-btn');
-            if (btn) btn.textContent = '⏸';
-          }}
-          onPause={(e) => {
-            const btn = e.currentTarget.parentElement?.querySelector('.wpp-audio-player-play-btn');
-            if (btn) btn.textContent = '▶';
-          }}
-          onEnded={(e) => {
-            const btn = e.currentTarget.parentElement?.querySelector('.wpp-audio-player-play-btn');
-            if (btn) btn.textContent = '▶';
-            const fill = e.currentTarget.parentElement?.querySelector('.wpp-audio-player-progress-fill') as HTMLElement;
-            if (fill) fill.style.width = '0%';
-          }}
-        />
-      </div>
+        )}
+      </>
     );
   }
   if (detectedType === 'video') {

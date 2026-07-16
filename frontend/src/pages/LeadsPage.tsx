@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { Bot, User, Send, Mic, Smile } from 'lucide-react';
-import type { Lead, Agent, Empresa, ChatMessage } from '../services/api';
+import type { Lead, Agent, Empresa, ChatMessage, LeadStatus } from '../services/api';
 import { api } from '../services/api';
 import { Badge } from '../components/ui/Badge';
 import { ConfirmationModal } from '../components/Modal';
@@ -103,6 +103,12 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [hasLoadedChatInitial, setHasLoadedChatInitial] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  
+  // Finalization and sale tracking states
+  const [showFinalizationModal, setShowFinalizationModal] = useState(false);
+  const [finalizationStep, setFinalizationStep] = useState<'ask_sale' | 'enter_value'>('ask_sale');
+  const [finalizationValue, setFinalizationValue] = useState('');
+  const [finalizationLoading, setFinalizationLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recordedAudio, setRecordedAudio] = useState<{ blob: Blob; base64: string; mimeType: string; duration: number } | null>(null);
@@ -487,6 +493,49 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     }
   }, [modalChatHistory, hasLoadedChatInitial, loadingModalChat]);
 
+  const handleQuickAssume = async () => {
+    if (!selectedLeadForModal) return;
+    try {
+      await updateLead(selectedLeadForModal.id, { status: 'HUMANO' });
+      setSelectedLeadForModal(prev => prev ? { ...prev, status: 'HUMANO' as const } : null);
+    } catch (err: any) {
+      alert('Erro ao assumir atendimento: ' + err.message);
+    }
+  };
+
+  const handleQuickCancel = async () => {
+    if (!selectedLeadForModal) return;
+    if (!confirm('Tem certeza que deseja cancelar este atendimento?')) return;
+    try {
+      await updateLead(selectedLeadForModal.id, { status: 'CANCELADO' });
+      setSelectedLeadForModal(prev => prev ? { ...prev, status: 'CANCELADO' as const } : null);
+    } catch (err: any) {
+      alert('Erro ao cancelar atendimento: ' + err.message);
+    }
+  };
+
+  const handleFinalize = async (hadSale: boolean, value?: number) => {
+    if (!selectedLeadForModal) return;
+    setFinalizationLoading(true);
+    try {
+      const updateData: Partial<Lead> = { status: 'FINALIZADO' };
+      if (hadSale && value !== undefined) {
+        updateData.value = value;
+      }
+      await updateLead(selectedLeadForModal.id, updateData);
+      setSelectedLeadForModal(prev => prev ? {
+        ...prev,
+        status: 'FINALIZADO' as const,
+        ...(hadSale && value !== undefined ? { value } : {}),
+      } : null);
+      setShowFinalizationModal(false);
+    } catch (err: any) {
+      alert('Erro ao finalizar atendimento: ' + err.message);
+    } finally {
+      setFinalizationLoading(false);
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const rawText = messageInputRef.current?.value.trim() || '';
@@ -494,7 +543,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     if ((!rawText && !hasFile) || !selectedLeadForModal || sendingMessage) return;
     setSendingMessage(true);
     const senderLabel = userName || 'Atendente';
-    const text = rawText ? `*${senderLabel}*\n\n${rawText}` : '';
+    const text = rawText ? `*${senderLabel}*\n${rawText}` : '';
 
     let messageType: string | undefined;
     let mediaBase64: string | undefined;
@@ -547,6 +596,8 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     if (!content) return '';
     return content
       .replace(/<\/?[a-zA-Z]+Msg>/g, '')
+      .replace(/<transcription>([\s\S]*?)<\/transcription>/gi, '$1')
+      .replace(/<transcricao>([\s\S]*?)<\/transcricao>/gi, '$1')
       .trim();
   };
 
@@ -715,10 +766,11 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
     const leadId = Number(leadIdStr);
     if (!isNaN(leadId)) {
       try {
-        await updateLead(leadId, { status });
+        const leadStatusVal = status as LeadStatus;
+        await updateLead(leadId, { status: leadStatusVal });
         // Update modal status if open and matched
         if (selectedLeadForModal && selectedLeadForModal.id === leadId) {
-          setSelectedLeadForModal(prev => prev ? { ...prev, status } : null);
+          setSelectedLeadForModal(prev => prev ? { ...prev, status: leadStatusVal } : null);
         }
       } catch (err) {
         console.error('Erro ao atualizar status do lead:', err);
@@ -963,7 +1015,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                       className="form-control"
                       value={selectedLeadForModal.status}
                       onChange={async (e) => {
-                        const newStatus = e.target.value;
+                        const newStatus = e.target.value as LeadStatus;
                         try {
                           await updateLead(selectedLeadForModal.id, { status: newStatus });
                           setSelectedLeadForModal(prev => prev ? { ...prev, status: newStatus } : null);
@@ -1038,11 +1090,32 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                   <div>
                     <div className="wpp-chat-name">{selectedLeadForModal.name || 'Sem nome'}</div>
                     <div className="wpp-chat-status">
-                      {selectedLeadForModal.session_id ? `Sessão: ${selectedLeadForModal.session_id}` : 'Sem sessão ativa'}
+                      {selectedLeadForModal.session_id ? `Sessão: ${selectedLeadForModal.session_id}` : 'Sem sessão activa'}
                     </div>
                   </div>
                 </div>
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="wpp-action-bar">
+                    {selectedLeadForModal.status === 'NOVO' && (
+                      <button className="wpp-action-btn assume" onClick={handleQuickAssume}>
+                        🤝 Assumir
+                      </button>
+                    )}
+                    {selectedLeadForModal.status === 'HUMANO' && (
+                      <button className="wpp-action-btn finalize" onClick={() => {
+                        setFinalizationStep('ask_sale');
+                        setFinalizationValue('');
+                        setShowFinalizationModal(true);
+                      }}>
+                        ✅ Finalizar
+                      </button>
+                    )}
+                    {selectedLeadForModal.status !== 'CANCELADO' && selectedLeadForModal.status !== 'FINALIZADO' && hasWritePermission && (
+                      <button className="wpp-action-btn cancel" onClick={handleQuickCancel}>
+                        🚫 Cancelar
+                      </button>
+                    )}
+                  </div>
                   <button onClick={() => setSelectedLeadForModal(null)} style={{ color: '#8696a0', fontSize: '20px', padding: '4px 8px', background: 'transparent', border: 'none', cursor: 'pointer' }}>✕</button>
                 </div>
               </div>
@@ -1182,7 +1255,7 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                               {senderName}
                             </div>
                           )}
-                          {msg.messageType && msg.messageType !== 'conversation' && msg.messageType !== 'extendedTextMessage' && msg.messageType !== 'text' ? (
+                          {msg.messageType && msg.messageType !== 'conversation' && msg.messageType !== 'extendedTextMessage' ? (
                             <MediaMessageRenderer
                               messageId={msg.id}
                               messageType={msg.messageType}
@@ -1396,6 +1469,56 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
                 )}
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showFinalizationModal && (
+        <div className="finalization-modal-overlay">
+          <div className="finalization-modal">
+            {finalizationStep === 'ask_sale' ? (
+              <>
+                <div className="fin-modal-icon">✅</div>
+                <h3>Finalizar Atendimento</h3>
+                <p>Houve venda neste atendimento?</p>
+                <div className="fin-modal-actions">
+                  <button className="fin-btn yes" onClick={() => {
+                    setFinalizationStep('enter_value');
+                  }}>
+                    💰 Sim, houve venda
+                  </button>
+                  <button className="fin-btn no" onClick={() => handleFinalize(false)}>
+                    ❌ Não houve venda
+                  </button>
+                </div>
+                <button className="fin-btn-cancel" onClick={() => setShowFinalizationModal(false)}>
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="fin-modal-icon">💰</div>
+                <h3>Valor da Venda</h3>
+                <p>Qual o valor gerado neste atendimento?</p>
+                <input
+                  type="number"
+                  className="fin-value-input"
+                  placeholder="0,00"
+                  value={finalizationValue}
+                  onChange={e => setFinalizationValue(e.target.value)}
+                  autoFocus
+                />
+                <div className="fin-modal-actions">
+                  <button className="fin-btn yes" disabled={finalizationLoading}
+                    onClick={() => handleFinalize(true, Number(finalizationValue))}>
+                    {finalizationLoading ? 'Salvando...' : '✅ Confirmar'}
+                  </button>
+                  <button className="fin-btn no" onClick={() => setFinalizationStep('ask_sale')}>
+                    ← Voltar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
