@@ -101,7 +101,7 @@ export default function App() {
 
   const { empresas, createEmpresa, updateEmpresa, deleteEmpresa } = useEmpresas(token);
   const { agents, createAgent, updateAgent, deleteAgent } = useAgents(token);
-  const { leads, createLead, updateLead, deleteLead, refetch: refetchLeads } = useLeads(token, filterEmpresaId, filterAgentId);
+  const { leads, loading: leadsLoading, isFetching: leadsFetching, createLead, updateLead, deleteLead, refetch: refetchLeads } = useLeads(token, filterEmpresaId, filterAgentId);
   const { followUps, createFollowUp, updateFollowUp, deleteFollowUp } = useFollowUps(token);
 
   const currentCompany = companyId ? empresas.find(e => e.id === companyId) : null;
@@ -739,6 +739,8 @@ export default function App() {
             onFilterEmpresaChange={setFilterEmpresaId}
             onFilterAgentChange={setFilterAgentId}
             onPessoaClick={setSelectedPessoaId}
+            loading={leadsLoading}
+            isFetching={leadsFetching}
           />
         )}
 
@@ -843,7 +845,7 @@ export default function App() {
         )}
 
         {activeTab === 'pessoas' && (
-          <PessoasPage onPessoaClick={setSelectedPessoaId} />
+          <PessoasPage onPessoaClick={setSelectedPessoaId} leads={getFilteredLeads()} />
         )}
       </main>
       {selectedPessoaId !== null && (

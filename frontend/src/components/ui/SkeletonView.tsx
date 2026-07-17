@@ -1,7 +1,7 @@
 import React from 'react';
 import { Skeleton } from './Skeleton';
 
-type Tab = 'empresas' | 'agents' | 'follow-ups' | 'leads' | 'messages' | 'users';
+type Tab = 'empresas' | 'agents' | 'follow-ups' | 'leads' | 'messages' | 'users' | 'kanban';
 
 interface SkeletonViewProps {
   tab: Tab;
@@ -131,38 +131,107 @@ export const SkeletonView: React.FC<SkeletonViewProps> = ({ tab }) => {
 
   if (tab === 'leads') {
     return (
-      <div className="table-container" style={{ pointerEvents: 'none' }}>
-        <table className="custom-table">
+      <div className="w-full bg-surface border border-border-low-contrast rounded-2xl overflow-hidden" style={{ pointerEvents: 'none' }}>
+        <table className="w-full text-left border-collapse">
           <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Telefone / JID</th>
-              <th>Agente Vinculado</th>
-              <th>Estado (Status)</th>
-              <th>Valor</th>
-              <th>Última Mensagem</th>
-              <th>Ações</th>
+            <tr className="border-b border-border-low-contrast bg-surface-container-low">
+              <th className="py-4 px-6 text-label-md text-on-surface-variant/80 font-bold">Lead</th>
+              <th className="py-4 px-6 text-label-md text-on-surface-variant/80 font-bold">Tipo Atendimento</th>
+              <th className="py-4 px-6 text-label-md text-on-surface-variant/80 font-bold">Situação</th>
+              <th className="py-4 px-6 text-label-md text-on-surface-variant/80 font-bold">Valor</th>
+              <th className="py-4 px-6 text-label-md text-on-surface-variant/80 font-bold">Última Atualização</th>
+              <th className="py-4 px-6 text-right text-label-md text-on-surface-variant/80 font-bold">Ações</th>
             </tr>
           </thead>
-          <tbody>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <tr key={i}>
-                <td><Skeleton type="text" style={{ width: '120px', height: '14px', margin: 0 }} /></td>
-                <td><Skeleton type="text" style={{ width: '140px', height: '14px', margin: 0 }} /></td>
-                <td><Skeleton type="text" style={{ width: '100px', height: '14px', margin: 0 }} /></td>
-                <td><Skeleton style={{ width: '70px', height: '20px', borderRadius: '9999px' }} /></td>
-                <td><Skeleton type="text" style={{ width: '60px', height: '14px', margin: 0 }} /></td>
-                <td><Skeleton type="text" style={{ width: '130px', height: '14px', margin: 0 }} /></td>
-                <td>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <Skeleton style={{ width: '60px', height: '24px', borderRadius: '8px' }} />
-                    <Skeleton style={{ width: '75px', height: '24px', borderRadius: '8px' }} />
+          <tbody className="divide-y divide-border-low-contrast/50">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              <tr key={i} className="hover:bg-surface-container-lowest transition-colors">
+                <td className="py-4 px-6">
+                  <div className="flex items-center gap-3">
+                    <Skeleton type="circle" style={{ width: '36px', height: '36px' }} />
+                    <div className="flex flex-col gap-1">
+                      <Skeleton type="text" style={{ width: '140px', height: '14px', margin: 0 }} />
+                      <Skeleton type="text" style={{ width: '100px', height: '11px', margin: 0 }} />
+                    </div>
+                  </div>
+                </td>
+                <td className="py-4 px-6">
+                  <Skeleton style={{ width: '120px', height: '24px', borderRadius: '9999px' }} />
+                </td>
+                <td className="py-4 px-6">
+                  <Skeleton style={{ width: '70px', height: '20px', borderRadius: '6px' }} />
+                </td>
+                <td className="py-4 px-6">
+                  <Skeleton type="text" style={{ width: '70px', height: '14px', margin: 0 }} />
+                </td>
+                <td className="py-4 px-6">
+                  <div className="flex items-center gap-1.5">
+                    <Skeleton style={{ width: '16px', height: '16px', borderRadius: '9999px' }} />
+                    <Skeleton type="text" style={{ width: '60px', height: '12px', margin: 0 }} />
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <Skeleton style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
+                    <Skeleton style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+    );
+  }
+
+  if (tab === 'kanban') {
+    const columns = [
+      { id: 'ai-automated', title: 'Lead em atendimento automatizado', dotColor: 'bg-blue-500' },
+      { id: 'human-attended', title: 'Em Atendimento', dotColor: 'bg-secondary' },
+      { id: 'finished', title: 'Finalizados', dotColor: 'bg-primary-container' },
+      { id: 'billed', title: 'Faturado', dotColor: 'bg-status-success' },
+    ];
+    return (
+      <div className="flex gap-3.5 w-full min-w-[900px] pb-8 items-start" style={{ pointerEvents: 'none' }}>
+        {columns.map(col => (
+          <div key={col.id} className="flex flex-col flex-1 basis-0 min-w-0 bg-surface-container-low/50 rounded-xl p-3 border border-transparent">
+            <div className="flex flex-col mb-4 px-2 gap-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Skeleton style={{ width: '8px', height: '8px', borderRadius: '9999px' }} />
+                  <Skeleton type="title" style={{ width: '140px', height: '16px', margin: 0 }} />
+                </div>
+                <Skeleton style={{ width: '28px', height: '22px', borderRadius: '9999px' }} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-3">
+              {[1, 2, 3].map((cardIdx) => (
+                <div key={cardIdx} className="bg-surface border border-border-low-contrast rounded-xl p-stack-md relative overflow-hidden">
+                  <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: 'var(--border-low-contrast)' }} />
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex flex-col gap-1">
+                      <Skeleton style={{ width: '60px', height: '18px', borderRadius: '6px' }} />
+                      <Skeleton type="text" style={{ width: '50px', height: '12px', margin: 0 }} />
+                    </div>
+                    <Skeleton style={{ width: '20px', height: '20px', borderRadius: '4px' }} />
+                  </div>
+                  <Skeleton type="title" style={{ width: '70%', height: '16px' }} />
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5 mb-2">
+                    <Skeleton type="text" style={{ width: '60px', height: '12px', margin: 0 }} />
+                    <Skeleton type="text" style={{ width: '80px', height: '12px', margin: 0 }} />
+                  </div>
+                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border-low-contrast">
+                    <div className="flex items-center gap-1.5">
+                      <Skeleton style={{ width: '16px', height: '16px', borderRadius: '9999px' }} />
+                      <Skeleton type="text" style={{ width: '45px', height: '11px', margin: 0 }} />
+                    </div>
+                    <Skeleton style={{ width: '24px', height: '24px', borderRadius: '9999px' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }

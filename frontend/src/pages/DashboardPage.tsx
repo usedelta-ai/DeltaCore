@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { FilterBar } from '../components/features/FilterBar';
 import { KanbanBoard } from '../components/features/KanbanBoard';
 import { LeadListView } from '../components/features/LeadListView';
+import { SkeletonView } from '../components/ui/SkeletonView';
 import type { LeadCardData } from '../components/features/LeadCard';
 import type { Lead, Agent, Empresa } from '../services/api';
 import { mapLeadToCardData, getStatusForColumn } from '../utils/leadMapper';
@@ -21,6 +22,8 @@ interface DashboardPageProps {
   onFilterEmpresaChange?: (val: string | number) => void;
   onFilterAgentChange?: (val: string | number) => void;
   onPessoaClick?: (pessoaId: number) => void;
+  loading?: boolean;
+  isFetching?: boolean;
 }
 
 function getColumnIdFromBadge(badgeLabel: string): string {
@@ -62,6 +65,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onFilterEmpresaChange,
   onFilterAgentChange,
   onPessoaClick,
+  loading = false,
+  isFetching = false,
 }) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [draggedLeadId, setDraggedLeadId] = useState<number | null>(null);
@@ -70,17 +75,39 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [hasLoadedForCurrentAgent, setHasLoadedForCurrentAgent] = useState(false);
+  const [autoRefreshPaused, setAutoRefreshPaused] = useState(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const isInitialAgentLoad = loading && !hasLoadedForCurrentAgent;
+
+  useEffect(() => {
+    setHasLoadedForCurrentAgent(false);
+  }, [filterAgentId, filterEmpresaId]);
+
+  useEffect(() => {
+    if (loading || isFetching) return;
+    if (!hasLoadedForCurrentAgent) {
+      setHasLoadedForCurrentAgent(true);
+      setCountdown(REFRESH_INTERVAL);
+    }
+  }, [loading, isFetching, hasLoadedForCurrentAgent]);
+
+  useEffect(() => {
+    setAutoRefreshPaused(isInitialAgentLoad);
+  }, [isInitialAgentLoad]);
 
   const triggerRefresh = useCallback(async () => {
     if (!onRefresh) return;
+    if (!hasLoadedForCurrentAgent) return;
     setIsRefreshing(true);
     setCountdown(REFRESH_INTERVAL);
     onRefresh();
     setTimeout(() => setIsRefreshing(false), 600);
-  }, [onRefresh]);
+  }, [onRefresh, hasLoadedForCurrentAgent]);
 
   useEffect(() => {
+    if (autoRefreshPaused) return;
     setCountdown(REFRESH_INTERVAL);
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
@@ -94,7 +121,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [triggerRefresh]);
+  }, [triggerRefresh, autoRefreshPaused]);
 
   const cardData = useMemo(() => {
     let result = leads.map(lead => mapLeadToCardData(lead, agents));
@@ -143,7 +170,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     setDragOverColumn(null);
   };
 
-  const handleDrop = async (e: React.DragEvent, columnId: string) => {
+  const handleDrop = (e: React.DragEvent, columnId: string) => {
     e.preventDefault();
     setDragOverColumn(null);
     const leadIdStr = e.dataTransfer.getData('text/plain');
@@ -161,11 +188,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     const statusText = statusMap[newStatus] || newStatus;
     const motive = `Alterado para ${statusText} via Kanban`;
 
-    try {
-      await updateLead(leadId, { status: newStatus, taken_motive: motive });
-    } catch (err) {
-      console.error('Erro ao atualizar status do lead:', err);
-    }
+    updateLead(leadId, { status: newStatus, taken_motive: motive });
   };
 
   const handleCardClick = (id: number) => {
@@ -195,27 +218,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         />
       </div>
 
-      <div className="overflow-x-auto">
-        {viewMode === 'kanban' ? (
-          <KanbanBoard
-            columns={columns}
-            onCardClick={handleCardClick}
-            onPessoaClick={onPessoaClick}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            dragOverColumn={dragOverColumn}
-            draggedLeadId={draggedLeadId}
-          />
-        ) : (
-          <LeadListView
-            leads={cardData}
-            onLeadClick={handleCardClick}
-            onPessoaClick={onPessoaClick}
-          />
-        )}
-      </div>
+      {isInitialAgentLoad ? (
+        <SkeletonView tab={viewMode === 'kanban' ? 'kanban' : 'leads'} />
+      ) : (
+        <div className="overflow-x-auto">
+          {viewMode === 'kanban' ? (
+            <KanbanBoard
+              columns={columns}
+              onCardClick={handleCardClick}
+              onPessoaClick={onPessoaClick}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              dragOverColumn={dragOverColumn}
+              draggedLeadId={draggedLeadId}
+            />
+          ) : (
+            <LeadListView
+              leads={cardData}
+              onLeadClick={handleCardClick}
+              onPessoaClick={onPessoaClick}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 };

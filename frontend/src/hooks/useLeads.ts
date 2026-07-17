@@ -27,9 +27,21 @@ export function useLeads(token: string | null, empresaId?: string | number, agen
   const updateMutation = useMutation({
     mutationFn: ({ id, leadData }: { id: number; leadData: Partial<Lead> }) =>
       api.updateLead(id, leadData),
-    onSuccess: (_, variables) => {
+    onMutate: async ({ id, leadData }) => {
+      await queryClient.cancelQueries({ queryKey: ['leads'] });
+      const previousLeads = queryClient.getQueryData<Lead[]>(['leads', { empresaId, agentId }]);
+      queryClient.setQueryData<Lead[]>(['leads', { empresaId, agentId }], old =>
+        old?.map(lead => lead.id === id ? { ...lead, ...leadData } : lead) ?? []
+      );
+      return { previousLeads };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousLeads) {
+        queryClient.setQueryData(['leads', { empresaId, agentId }], context.previousLeads);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
-      queryClient.invalidateQueries({ queryKey: ['lead', variables.id] });
     },
   });
 
