@@ -6,6 +6,7 @@ import { LeadUsecases } from '../../../../ports/driver/LeadUsecases';
 import { ChatUsecases } from '../../../../ports/driver/ChatUsecases';
 import { EvolutionUsecases } from '../../../../ports/driver/EvolutionUsecases';
 import { UserUsecases } from '../../../../ports/driver/UserUsecases';
+import { PessoaUsecases } from '../../../../ports/driver/PessoaUsecases';
 
 export class MainController {
   constructor(
@@ -15,7 +16,8 @@ export class MainController {
     private leadUsecases: LeadUsecases,
     private chatUsecases: ChatUsecases,
     private evolutionUsecases: EvolutionUsecases,
-    private userUsecases: UserUsecases
+    private userUsecases: UserUsecases,
+    private pessoaUsecases: PessoaUsecases
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -361,6 +363,68 @@ export class MainController {
       return { message: 'User deleted successfully' };
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to delete user.' });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // PESSOAS
+  // ---------------------------------------------------------------------------
+  async getPessoas(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const data = await this.pessoaUsecases.getPessoas(request.user!);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to fetch pessoas.' });
+    }
+  }
+
+  async getPessoaById(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    const id = parseInt(request.params.id, 10);
+    try {
+      const data = await this.pessoaUsecases.getPessoaById(request.user!, id);
+      if (!data) return reply.status(404).send({ error: 'Pessoa not found' });
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to fetch pessoa.' });
+    }
+  }
+
+  async createPessoa(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
+    try {
+      const data = await this.pessoaUsecases.createPessoa(request.user!, request.body as any);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to create pessoa.' });
+    }
+  }
+
+  async updatePessoa(request: FastifyRequest<{ Params: { id: string }; Body: any }>, reply: FastifyReply) {
+    const id = parseInt(request.params.id, 10);
+    try {
+      const data = await this.pessoaUsecases.updatePessoa(request.user!, id, request.body as any);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to update pessoa.' });
+    }
+  }
+
+  async deletePessoa(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    const id = parseInt(request.params.id, 10);
+    try {
+      await this.pessoaUsecases.deletePessoa(request.user!, id);
+      return { message: 'Pessoa deleted successfully' };
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to delete pessoa.' });
+    }
+  }
+
+  async getLeadsByPessoaId(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+    const id = parseInt(request.params.id, 10);
+    try {
+      const data = await this.pessoaUsecases.getLeadsByPessoaId(request.user!, id);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to fetch related leads.' });
     }
   }
 }

@@ -1,4 +1,6 @@
 import React from 'react';
+import { Select } from './Select';
+import type { SelectOption } from './Select';
 
 interface FormInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -36,7 +38,7 @@ export const FormInput: React.FC<FormInputProps> = ({
 interface FormSelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label: string;
   error?: string | null;
-  options: { value: string | number; label: string }[];
+  options: SelectOption[];
 }
 
 export const FormSelect: React.FC<FormSelectProps> = ({
@@ -47,30 +49,19 @@ export const FormSelect: React.FC<FormSelectProps> = ({
   className = '',
   ...props
 }) => {
-  const inputId = id || label.toLowerCase().replace(/\s+/g, '-');
-
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-label-md font-label-md text-on-surface-variant">
-        {label}
-      </label>
-      <select
-        id={inputId}
-        className={`px-3.5 py-3 text-body-sm rounded-xl border border-border-low-contrast bg-white text-on-surface outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/10 ${
-          error ? 'border-status-critical focus:border-status-critical' : ''
-        } ${className}`}
-        {...props}
-      >
-        {options.map(opt => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-      {error && (
-        <span className="text-label-md text-status-critical">{error}</span>
-      )}
-    </div>
+    <Select
+      label={label}
+      error={error}
+      options={options}
+      id={id}
+      className={className}
+      {...props}
+    />
   );
 };
+
+export type { SelectOption };
 
 interface FormCheckboxProps {
   label: string;

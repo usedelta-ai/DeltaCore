@@ -3,6 +3,7 @@ import { Agent } from '../../domain/entities/Agent';
 import { Lead } from '../../domain/entities/Lead';
 import { FollowUpSetting, ChatMessage } from '../../domain/entities/FollowUp';
 import { User } from '../../domain/entities/User';
+import { Pessoa } from '../../domain/entities/Pessoa';
 
 export interface DBPort {
   // Empresas
@@ -68,4 +69,14 @@ export interface DBPort {
     old_value: string | null;
     new_value: string | null;
   }): Promise<void>;
+
+  // Pessoas
+  getPessoas(): Promise<Pessoa[]>;
+  getPessoaById(id: number): Promise<Pessoa | null>;
+  getPessoaByPhone(phone: string): Promise<Pessoa | null>;
+  createPessoa(pessoa: Omit<Pessoa, 'id'>): Promise<Pessoa>;
+  updatePessoa(id: number, pessoa: Partial<Pessoa>): Promise<Pessoa>;
+  deletePessoa(id: number): Promise<boolean>;
+  getLeadsByPessoaId(pessoaId: number): Promise<Lead[]>;
+  getLeadsByPhone(phone: string): Promise<Lead[]>;
 }

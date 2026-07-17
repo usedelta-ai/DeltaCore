@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.lead_history = exports.messages = exports.lead = exports.follow_up_settings = exports.agents = exports.users = exports.empresa = void 0;
+exports.lead_history = exports.messages = exports.lead = exports.pessoa = exports.follow_up_settings = exports.agents = exports.users = exports.empresa = void 0;
 const pg_core_1 = require("drizzle-orm/pg-core");
 // Custom type for bytea (binary) data to support logo storage
 const bytea = (0, pg_core_1.customType)({
@@ -55,6 +55,14 @@ exports.follow_up_settings = (0, pg_core_1.pgTable)('follow_up_settings', {
     active: (0, pg_core_1.boolean)('active').default(true).notNull(),
     created_at: (0, pg_core_1.timestamp)('created_at', { withTimezone: true }).defaultNow(),
 });
+// 4.5. Tabela Pessoa
+exports.pessoa = (0, pg_core_1.pgTable)('pessoa', {
+    id: (0, pg_core_1.serial)('id').primaryKey(),
+    name: (0, pg_core_1.varchar)('name', { length: 255 }).notNull(),
+    phone: (0, pg_core_1.varchar)('phone', { length: 50 }).notNull().unique(),
+    created_at: (0, pg_core_1.timestamp)('created_at', { withTimezone: true }).defaultNow(),
+    updated_at: (0, pg_core_1.timestamp)('updated_at', { withTimezone: true }).defaultNow(),
+});
 // 5. Tabela Lead
 exports.lead = (0, pg_core_1.pgTable)('lead', {
     id: (0, pg_core_1.serial)('id').primaryKey(),
@@ -72,6 +80,8 @@ exports.lead = (0, pg_core_1.pgTable)('lead', {
     lastmessage: (0, pg_core_1.text)('lastmessage'),
     follow_up_id: (0, pg_core_1.integer)('follow_up_id').references(() => exports.follow_up_settings.id, { onDelete: 'set null' }),
     session_id: (0, pg_core_1.varchar)('session_id', { length: 255 }),
+    pessoa_id: (0, pg_core_1.integer)('pessoa_id').references(() => exports.pessoa.id, { onDelete: 'set null' }),
+    finalized_by: (0, pg_core_1.integer)('finalized_by').references(() => exports.users.id, { onDelete: 'set null' }),
 });
 // 6. Tabela Messages
 exports.messages = (0, pg_core_1.pgTable)('messages', {

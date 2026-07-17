@@ -262,6 +262,9 @@ class PostgresAdapter {
             lastmessage: schema.lead.lastmessage,
             follow_up_id: schema.lead.follow_up_id,
             session_id: schema.lead.session_id,
+            pessoa_id: schema.lead.pessoa_id,
+            finalized_by: schema.lead.finalized_by,
+            finalized_by_name: schema.users.name,
             translations: schema.agents.translations,
             agent_name: schema.agents.name,
             agent_status: schema.agents.status,
@@ -270,12 +273,35 @@ class PostgresAdapter {
             .from(schema.lead)
             .leftJoin(schema.agents, (0, drizzle_orm_1.eq)(schema.lead.agent_id, schema.agents.id))
             .leftJoin(schema.follow_up_settings, (0, drizzle_orm_1.eq)(schema.lead.follow_up_id, schema.follow_up_settings.id))
+            .leftJoin(schema.users, (0, drizzle_orm_1.eq)(schema.lead.finalized_by, schema.users.id))
             .where((0, drizzle_orm_1.and)(...conditions))
             .orderBy((0, drizzle_orm_1.desc)(schema.lead.id));
         return res;
     }
     async getLeadById(id) {
-        const res = await db_1.db.select().from(schema.lead).where((0, drizzle_orm_1.eq)(schema.lead.id, id));
+        const res = await db_1.db.select({
+            id: schema.lead.id,
+            agent_id: schema.lead.agent_id,
+            remote_jid_alt: schema.lead.remote_jid_alt,
+            name: schema.lead.name,
+            custom_properties: schema.lead.custom_properties,
+            status: schema.lead.status,
+            taken_over_at: schema.lead.taken_over_at,
+            take_over_expires_at: schema.lead.take_over_expires_at,
+            updated_at: schema.lead.updated_at,
+            created_at: schema.lead.created_at,
+            taken_motive: schema.lead.taken_motive,
+            value: schema.lead.value,
+            lastmessage: schema.lead.lastmessage,
+            follow_up_id: schema.lead.follow_up_id,
+            session_id: schema.lead.session_id,
+            pessoa_id: schema.lead.pessoa_id,
+            finalized_by: schema.lead.finalized_by,
+            finalized_by_name: schema.users.name,
+        })
+            .from(schema.lead)
+            .leftJoin(schema.users, (0, drizzle_orm_1.eq)(schema.lead.finalized_by, schema.users.id))
+            .where((0, drizzle_orm_1.eq)(schema.lead.id, id));
         return res[0] || null;
     }
     async createLead(lead) {
@@ -293,6 +319,8 @@ class PostgresAdapter {
             lastmessage: lead.lastmessage,
             follow_up_id: lead.follow_up_id,
             session_id: lead.session_id || null,
+            pessoa_id: lead.pessoa_id ?? null,
+            finalized_by: lead.finalized_by ?? null,
         })
             .returning();
         return res[0];
@@ -322,6 +350,8 @@ class PostgresAdapter {
             lastmessage: lead.lastmessage ?? oldLead.lastmessage,
             follow_up_id: lead.follow_up_id !== undefined ? lead.follow_up_id : oldLead.follow_up_id,
             session_id: lead.session_id !== undefined ? (lead.session_id || null) : oldLead.session_id,
+            pessoa_id: lead.pessoa_id !== undefined ? lead.pessoa_id : oldLead.pessoa_id,
+            finalized_by: lead.finalized_by !== undefined ? lead.finalized_by : oldLead.finalized_by,
             updated_at: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema.lead.id, id))
@@ -475,6 +505,130 @@ class PostgresAdapter {
             .where((0, drizzle_orm_1.eq)(schema.users.id, id))
             .returning();
         return res.length > 0;
+    }
+    async getLeadHistoryChanges(leadId) {
+        const res = await db_1.db.select({
+            id: schema.lead_history.id,
+            lead_id: schema.lead_history.lead_id,
+            user_id: schema.lead_history.user_id,
+            agent_id: schema.lead_history.agent_id,
+            changed_by_agent: schema.lead_history.changed_by_agent,
+            field_name: schema.lead_history.field_name,
+            old_value: schema.lead_history.old_value,
+            new_value: schema.lead_history.new_value,
+            created_at: schema.lead_history.created_at,
+            user_name: schema.users.name,
+            agent_name: schema.agents.name
+        })
+            .from(schema.lead_history)
+            .leftJoin(schema.users, (0, drizzle_orm_1.eq)(schema.lead_history.user_id, schema.users.id))
+            .leftJoin(schema.agents, (0, drizzle_orm_1.eq)(schema.lead_history.agent_id, schema.agents.id))
+            .where((0, drizzle_orm_1.eq)(schema.lead_history.lead_id, leadId))
+            .orderBy((0, drizzle_orm_1.asc)(schema.lead_history.created_at));
+        return res;
+    }
+    async insertLeadHistoryLog(log) {
+        await db_1.db.insert(schema.lead_history)
+            .values({
+            lead_id: log.lead_id,
+            user_id: log.user_id ?? null,
+            agent_id: log.agent_id ?? null,
+            changed_by_agent: log.changed_by_agent,
+            field_name: log.field_name,
+            old_value: log.old_value,
+            new_value: log.new_value
+        });
+    }
+    // Pessoas CRUD implementations
+    async getPessoas() {
+        const res = await db_1.db.select().from(schema.pessoa).orderBy((0, drizzle_orm_1.desc)(schema.pessoa.id));
+        return res;
+    }
+    async getPessoaById(id) {
+        const res = await db_1.db.select().from(schema.pessoa).where((0, drizzle_orm_1.eq)(schema.pessoa.id, id));
+        return res[0] || null;
+    }
+    async getPessoaByPhone(phone) {
+        const res = await db_1.db.select().from(schema.pessoa).where((0, drizzle_orm_1.eq)(schema.pessoa.phone, phone));
+        return res[0] || null;
+    }
+    async createPessoa(pessoa) {
+        const res = await db_1.db.insert(schema.pessoa)
+            .values({
+            name: pessoa.name,
+            phone: pessoa.phone,
+        })
+            .returning();
+        return res[0];
+    }
+    async updatePessoa(id, pessoa) {
+        const res = await db_1.db.update(schema.pessoa)
+            .set({
+            name: pessoa.name,
+            phone: pessoa.phone,
+            updated_at: new Date(),
+        })
+            .where((0, drizzle_orm_1.eq)(schema.pessoa.id, id))
+            .returning();
+        if (res.length === 0)
+            throw new Error('Pessoa not found');
+        return res[0];
+    }
+    async deletePessoa(id) {
+        const res = await db_1.db.delete(schema.pessoa).where((0, drizzle_orm_1.eq)(schema.pessoa.id, id)).returning();
+        return res.length > 0;
+    }
+    async getLeadsByPessoaId(pessoaId) {
+        const res = await db_1.db.select({
+            id: schema.lead.id,
+            agent_id: schema.lead.agent_id,
+            remote_jid_alt: schema.lead.remote_jid_alt,
+            name: schema.lead.name,
+            custom_properties: schema.lead.custom_properties,
+            status: schema.lead.status,
+            taken_over_at: schema.lead.taken_over_at,
+            take_over_expires_at: schema.lead.take_over_expires_at,
+            updated_at: schema.lead.updated_at,
+            created_at: schema.lead.created_at,
+            taken_motive: schema.lead.taken_motive,
+            value: schema.lead.value,
+            lastmessage: schema.lead.lastmessage,
+            follow_up_id: schema.lead.follow_up_id,
+            session_id: schema.lead.session_id,
+            pessoa_id: schema.lead.pessoa_id,
+            agent_name: schema.agents.name,
+        })
+            .from(schema.lead)
+            .leftJoin(schema.agents, (0, drizzle_orm_1.eq)(schema.lead.agent_id, schema.agents.id))
+            .where((0, drizzle_orm_1.eq)(schema.lead.pessoa_id, pessoaId))
+            .orderBy((0, drizzle_orm_1.desc)(schema.lead.id));
+        return res;
+    }
+    async getLeadsByPhone(phone) {
+        const res = await db_1.db.select({
+            id: schema.lead.id,
+            agent_id: schema.lead.agent_id,
+            remote_jid_alt: schema.lead.remote_jid_alt,
+            name: schema.lead.name,
+            custom_properties: schema.lead.custom_properties,
+            status: schema.lead.status,
+            taken_over_at: schema.lead.taken_over_at,
+            take_over_expires_at: schema.lead.take_over_expires_at,
+            updated_at: schema.lead.updated_at,
+            created_at: schema.lead.created_at,
+            taken_motive: schema.lead.taken_motive,
+            value: schema.lead.value,
+            lastmessage: schema.lead.lastmessage,
+            follow_up_id: schema.lead.follow_up_id,
+            session_id: schema.lead.session_id,
+            pessoa_id: schema.lead.pessoa_id,
+            agent_name: schema.agents.name,
+        })
+            .from(schema.lead)
+            .leftJoin(schema.agents, (0, drizzle_orm_1.eq)(schema.lead.agent_id, schema.agents.id))
+            .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema.lead.remote_jid_alt, phone), (0, drizzle_orm_1.eq)(schema.lead.remote_jid_alt, `${phone}@s.whatsapp.net`)))
+            .orderBy((0, drizzle_orm_1.desc)(schema.lead.id));
+        return res;
     }
 }
 exports.PostgresAdapter = PostgresAdapter;

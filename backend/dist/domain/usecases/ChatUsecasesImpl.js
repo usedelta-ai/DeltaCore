@@ -253,34 +253,73 @@ class ChatUsecasesImpl {
                 });
             }
         }
-        // ── 5) Inject system events (human takeover, finalization) ─────────────────
+        // ── 5) Inject system events (creation date from lead + physical lead_history log changes) ─────────────────
         const systemEvents = [];
-        const isHuman = lead.status === 'HUMANO';
-        const isFinalized = lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO';
-        if ((isHuman || isFinalized) && lead.taken_over_at) {
+        if (lead.created_at) {
             systemEvents.push({
-                id: `system-human-${lead.id}`,
+                id: `system-created-${lead.id}`,
                 type: 'system_event',
-                event: 'human_takeover',
-                content: lead.taken_motive
-                    ? `🔁 Atendimento humano — ${lead.taken_motive}`
-                    : '🔁 Atendimento humano iniciado',
+                event: 'lead_created',
+                content: 'Lead criado no sistema',
                 role: 'system_event',
-                createdAt: new Date(lead.taken_over_at),
+                createdAt: new Date(lead.created_at),
             });
         }
-        if (isFinalized) {
-            systemEvents.push({
-                id: `system-finalized-${lead.id}`,
-                type: 'system_event',
-                event: 'lead_finalized',
-                content: lead.status === 'CONCLUIDO'
-                    ? '✅ Atendimento concluído'
-                    : '✅ Atendimento finalizado',
-                role: 'system_event',
-                createdAt: lead.updated_at ? new Date(lead.updated_at) : new Date(),
-            });
+        // Query physical lead_history table logs
+        try {
+            let translations = {};
+            if (agent && agent.translations) {
+                try {
+                    translations = typeof agent.translations === 'string' ? JSON.parse(agent.translations) : agent.translations;
+                }
+                catch (_) { }
+            }
+            const historyLogs = await this.db.getLeadHistoryChanges(leadId);
+            for (const log of historyLogs) {
+                const who = log.changed_by_agent
+                    ? `Agente ${log.agent_name || 'IA'}`
+                    : (log.user_name ? log.user_name : 'Sistema');
+                const fieldMap = {
+                    'status': 'Status',
+                    'value': 'Valor Estimado',
+                    'agent_id': 'Agente Responsável',
+                    'name': 'Nome do Lead'
+                };
+                let fieldName = fieldMap[log.field_name] || log.field_name;
+                if (log.field_name.startsWith('custom_properties.')) {
+                    const key = log.field_name.replace('custom_properties.', '');
+                    const defaultTranslations = {
+                        room_type: 'Tipo de Quarto',
+                        guest_count: 'Hóspedes',
+                        check_in_date: 'Check-in',
+                        check_out_date: 'Check-out',
+                        children_count: 'Crianças',
+                        adults_count: 'Adultos',
+                        phone: 'Telefone',
+                        email: 'E-mail',
+                        city: 'Cidade',
+                        state: 'Estado',
+                        country: 'País',
+                        notes: 'Observações',
+                        reservation_code: 'Código da Reserva',
+                        created_at: 'Criado em',
+                        updated_at: 'Atualizado em',
+                        conversation_summary: 'Resumo da Conversa'
+                    };
+                    const translatedKey = translations[key] || defaultTranslations[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+                    fieldName = `Propriedade "${translatedKey}"`;
+                }
+                systemEvents.push({
+                    id: `log-change-${log.id}`,
+                    type: 'system_event',
+                    event: 'field_change',
+                    content: `Alteração de ${fieldName}: de "${log.old_value || '-'}" para "${log.new_value || '-'}" por ${who}`,
+                    role: 'system_event',
+                    createdAt: new Date(log.created_at),
+                });
+            }
         }
+        catch (_) { }
         // ── 6) Merge standard messages + tool events + system events, sort chronologically ──
         const combined = [
             ...standardMessages.map((m) => ({ ...m, type: 'message' })),

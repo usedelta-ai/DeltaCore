@@ -304,6 +304,13 @@ export class ChatUsecasesImpl implements ChatUsecases {
 
     // Query physical lead_history table logs
     try {
+      let translations: Record<string, string> = {};
+      if (agent && agent.translations) {
+        try {
+          translations = typeof agent.translations === 'string' ? JSON.parse(agent.translations) : agent.translations;
+        } catch (_) {}
+      }
+
       const historyLogs = await this.db.getLeadHistoryChanges(leadId);
       for (const log of historyLogs) {
         const who = log.changed_by_agent 
@@ -316,7 +323,31 @@ export class ChatUsecasesImpl implements ChatUsecases {
           'agent_id': 'Agente Responsável',
           'name': 'Nome do Lead'
         };
-        const fieldName = fieldMap[log.field_name] || log.field_name;
+
+        let fieldName = fieldMap[log.field_name] || log.field_name;
+        if (log.field_name.startsWith('custom_properties.')) {
+          const key = log.field_name.replace('custom_properties.', '');
+          const defaultTranslations: Record<string, string> = {
+            room_type: 'Tipo de Quarto',
+            guest_count: 'Hóspedes',
+            check_in_date: 'Check-in',
+            check_out_date: 'Check-out',
+            children_count: 'Crianças',
+            adults_count: 'Adultos',
+            phone: 'Telefone',
+            email: 'E-mail',
+            city: 'Cidade',
+            state: 'Estado',
+            country: 'País',
+            notes: 'Observações',
+            reservation_code: 'Código da Reserva',
+            created_at: 'Criado em',
+            updated_at: 'Atualizado em',
+            conversation_summary: 'Resumo da Conversa'
+          };
+          const translatedKey = translations[key] || defaultTranslations[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+          fieldName = `Propriedade "${translatedKey}"`;
+        }
 
         systemEvents.push({
           id: `log-change-${log.id}`,

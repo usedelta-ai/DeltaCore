@@ -19,6 +19,7 @@ interface DashboardPageProps {
   filterAgentId?: string | number;
   onFilterEmpresaChange?: (val: string | number) => void;
   onFilterAgentChange?: (val: string | number) => void;
+  onPessoaClick?: (pessoaId: number) => void;
 }
 
 function getColumnIdFromBadge(badgeLabel: string): string {
@@ -59,12 +60,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   filterAgentId = '',
   onFilterEmpresaChange,
   onFilterAgentChange,
+  onPessoaClick,
 }) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [draggedLeadId, setDraggedLeadId] = useState<number | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const triggerRefresh = useCallback(async () => {
@@ -91,10 +95,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     };
   }, [triggerRefresh]);
 
-  const cardData = useMemo(() =>
-    leads.map(lead => mapLeadToCardData(lead, agents)),
-    [leads, agents]
-  );
+  const cardData = useMemo(() => {
+    let result = leads.map(lead => mapLeadToCardData(lead, agents));
+
+    if (searchTerm.trim()) {
+      const lower = searchTerm.toLowerCase();
+      result = result.filter(card => {
+        const nameMatch = card.name.toLowerCase().includes(lower);
+        const phoneMatch = card.phone ? card.phone.toLowerCase().includes(lower) : false;
+        return nameMatch || phoneMatch;
+      });
+    }
+
+    if (selectedStatus) {
+      result = result.filter(card => card.badge.label === selectedStatus);
+    }
+
+    return result;
+  }, [leads, agents, searchTerm, selectedStatus]);
 
   const columns = useMemo(() => buildColumns(cardData), [cardData]);
 
@@ -132,8 +150,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     if (!leadId || !updateLead) return;
 
     const newStatus = getStatusForColumn(columnId);
+    const statusMap: Record<string, string> = {
+      'NOVO': 'Novo Lead',
+      'HUMANO': 'Em Atendimento',
+      'FINALIZADO': 'Finalizado',
+      'CONCLUIDO': 'Faturado',
+      'CANCELADO': 'Cancelado'
+    };
+    const statusText = statusMap[newStatus] || newStatus;
+    const motive = `Alterado para ${statusText} via Kanban`;
+
     try {
-      await updateLead(leadId, { status: newStatus });
+      await updateLead(leadId, { status: newStatus, taken_motive: motive });
     } catch (err) {
       console.error('Erro ao atualizar status do lead:', err);
     }
@@ -159,6 +187,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           selectedAgent={String(filterAgentId)}
           onCompanyChange={val => onFilterEmpresaChange?.(val)}
           onAgentChange={val => onFilterAgentChange?.(val)}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          selectedStatus={selectedStatus}
+          onStatusChange={setSelectedStatus}
           companyOptions={companyOptions}
           agentOptions={agentOptions}
         />
@@ -204,6 +236,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <KanbanBoard
           columns={columns}
           onCardClick={handleCardClick}
+          onPessoaClick={onPessoaClick}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}

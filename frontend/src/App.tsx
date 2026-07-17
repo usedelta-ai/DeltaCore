@@ -17,11 +17,13 @@ import { MessagesPage } from './pages/MessagesPage';
 import { UsersPage } from './pages/UsersPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ImmersiveLeadView } from './pages/ImmersiveLeadView';
+import { PessoaModal } from './components/features/PessoaModal';
+import { PessoasPage } from './pages/PessoasPage';
 
 // Layout
 import { SideNavBar } from './components/layout/SideNavBar';
 
-export type Tab = 'empresas' | 'agents' | 'follow-ups' | 'leads' | 'messages' | 'users';
+export type Tab = 'empresas' | 'agents' | 'follow-ups' | 'leads' | 'messages' | 'users' | 'pessoas';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('auth-token'));
@@ -76,7 +78,7 @@ export default function App() {
       leadId = Number(possibleLeadId);
     }
     
-    const validTabs: Tab[] = ['empresas', 'agents', 'follow-ups', 'leads', 'messages', 'users'];
+    const validTabs: Tab[] = ['empresas', 'agents', 'follow-ups', 'leads', 'messages', 'users', 'pessoas'];
     let tab: Tab = isSuperAdmin ? 'empresas' : 'agents';
     if (validTabs.includes(tabStr as Tab)) {
       tab = tabStr as Tab;
@@ -158,6 +160,7 @@ export default function App() {
   const [selectedImmersiveLeadId, setSelectedImmersiveLeadId] = useState<number | null>(() => getRouteInfo().leadId);
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const [selectedPessoaId, setSelectedPessoaId] = useState<number | null>(null);
 
   // Fetch empresa logo when user has empresa_id but no logo found
   useEffect(() => {
@@ -685,6 +688,8 @@ export default function App() {
           localStorage.setItem('sidebar_collapsed', String(next));
         }}
         hasWritePermission={hasWritePermission}
+        agents={getFilteredAgents()}
+        onPessoaClick={setSelectedPessoaId}
       />
     );
   }
@@ -708,7 +713,7 @@ export default function App() {
         userName={user?.name}
       />
       <TopAppBar />
-      <main className={`${isMainSidebarCollapsed ? 'ml-20' : 'ml-64'} mt-16 p-gutter min-h-[calc(100vh-64px)] overflow-x-auto`}>
+      <main className={`${isMainSidebarCollapsed ? 'ml-20' : 'ml-64'} mt-16 ${activeTab === 'leads' && (leadViewMode === 'dashboard' || leadViewMode === null) ? 'px-5 py-4' : 'p-gutter'} min-h-[calc(100vh-64px)] overflow-x-auto`}>
         {activeTab === 'leads' && (leadViewMode === 'dashboard' || leadViewMode === null) && (
           <DashboardPage
             onLeadClick={handleLeadClick}
@@ -722,6 +727,7 @@ export default function App() {
             filterAgentId={filterAgentId}
             onFilterEmpresaChange={setFilterEmpresaId}
             onFilterAgentChange={setFilterAgentId}
+            onPessoaClick={setSelectedPessoaId}
           />
         )}
 
@@ -824,7 +830,21 @@ export default function App() {
         {activeTab === 'users' && isSuperAdmin && (
           <UsersPage empresas={empresas} />
         )}
+
+        {activeTab === 'pessoas' && (
+          <PessoasPage onPessoaClick={setSelectedPessoaId} />
+        )}
       </main>
+      {selectedPessoaId !== null && (
+        <PessoaModal
+          pessoaId={selectedPessoaId}
+          onClose={() => setSelectedPessoaId(null)}
+          onLeadClick={(leadId) => {
+            // Open the lead immersive view WITHOUT closing the pessoa modal
+            handleLeadClick(leadId);
+          }}
+        />
+      )}
     </div>
   );
 }

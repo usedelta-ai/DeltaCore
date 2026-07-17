@@ -51,6 +51,14 @@ export class LeadUsecasesImpl implements LeadUsecases {
     if (lead.agent_id !== undefined) {
       await this.checkCompanyAccessByAgent(user, lead.agent_id);
     }
+
+    if (lead.status !== undefined) {
+      if (lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO') {
+        lead.finalized_by = user.userId;
+      } else {
+        lead.finalized_by = null;
+      }
+    }
     
     const updated = await this.db.updateLead(id, lead);
 
@@ -70,6 +78,33 @@ export class LeadUsecasesImpl implements LeadUsecases {
           });
         } catch (e) {
           console.error(`Erro ao salvar log de histórico de alteração do lead:`, e);
+        }
+      }
+    }
+
+    // Compara e registra alterações de custom_properties
+    if (lead.custom_properties !== undefined && lead.custom_properties !== null) {
+      const oldProps = (existing.custom_properties || {}) as Record<string, any>;
+      const newProps = (lead.custom_properties || {}) as Record<string, any>;
+      const allKeys = new Set([...Object.keys(oldProps), ...Object.keys(newProps)]);
+
+      for (const key of allKeys) {
+        const oldVal = oldProps[key];
+        const newVal = newProps[key];
+        if (String(oldVal) !== String(newVal)) {
+          try {
+            await this.db.insertLeadHistoryLog({
+              lead_id: id,
+              user_id: user.userId,
+              agent_id: existing.agent_id,
+              changed_by_agent: false,
+              field_name: `custom_properties.${key}`,
+              old_value: oldVal !== undefined && oldVal !== null ? String(oldVal) : null,
+              new_value: newVal !== undefined && newVal !== null ? String(newVal) : null
+            });
+          } catch (e) {
+            console.error(`Erro ao salvar log de custom_properties no histórico:`, e);
+          }
         }
       }
     }

@@ -19,6 +19,7 @@ const navItems = [
   { tab: 'agents' as AppTab, icon: 'smart_toy', label: 'Agentes', superAdminOnly: false },
   { tab: 'follow-ups' as AppTab, icon: 'event_repeat', label: 'Follow-ups', superAdminOnly: false },
   { tab: 'leads' as AppTab, icon: 'person_search', label: 'Leads', superAdminOnly: false },
+  { tab: 'pessoas' as AppTab, icon: 'contact_page', label: 'Pessoas', superAdminOnly: false },
   { tab: 'messages' as AppTab, icon: 'chat', label: 'Histórico de Chat', superAdminOnly: true },
   { tab: 'users' as AppTab, icon: 'manage_accounts', label: 'Usuários', superAdminOnly: true },
 ];

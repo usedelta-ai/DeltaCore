@@ -19,9 +19,12 @@ export interface Lead {
   lastmessage?: string | null;
   follow_up_id?: number | null;
   session_id?: string | null;
+  pessoa_id?: number | null;
   created_at?: Date;
   updated_at?: Date;
   agent_name?: string;
   agent_status?: number;
   follow_up_message?: string;
+  finalized_by?: number | null;
+  finalized_by_name?: string;
 }

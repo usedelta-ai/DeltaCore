@@ -9,7 +9,8 @@ class MainController {
     chatUsecases;
     evolutionUsecases;
     userUsecases;
-    constructor(empresaUsecases, agentUsecases, followUpUsecases, leadUsecases, chatUsecases, evolutionUsecases, userUsecases) {
+    pessoaUsecases;
+    constructor(empresaUsecases, agentUsecases, followUpUsecases, leadUsecases, chatUsecases, evolutionUsecases, userUsecases, pessoaUsecases) {
         this.empresaUsecases = empresaUsecases;
         this.agentUsecases = agentUsecases;
         this.followUpUsecases = followUpUsecases;
@@ -17,6 +18,7 @@ class MainController {
         this.chatUsecases = chatUsecases;
         this.evolutionUsecases = evolutionUsecases;
         this.userUsecases = userUsecases;
+        this.pessoaUsecases = pessoaUsecases;
     }
     // ---------------------------------------------------------------------------
     // EMPRESAS
@@ -363,6 +365,69 @@ class MainController {
         }
         catch (err) {
             reply.status(500).send({ error: err.message || 'Failed to delete user.' });
+        }
+    }
+    // ---------------------------------------------------------------------------
+    // PESSOAS
+    // ---------------------------------------------------------------------------
+    async getPessoas(request, reply) {
+        try {
+            const data = await this.pessoaUsecases.getPessoas(request.user);
+            return data;
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to fetch pessoas.' });
+        }
+    }
+    async getPessoaById(request, reply) {
+        const id = parseInt(request.params.id, 10);
+        try {
+            const data = await this.pessoaUsecases.getPessoaById(request.user, id);
+            if (!data)
+                return reply.status(404).send({ error: 'Pessoa not found' });
+            return data;
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to fetch pessoa.' });
+        }
+    }
+    async createPessoa(request, reply) {
+        try {
+            const data = await this.pessoaUsecases.createPessoa(request.user, request.body);
+            return data;
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to create pessoa.' });
+        }
+    }
+    async updatePessoa(request, reply) {
+        const id = parseInt(request.params.id, 10);
+        try {
+            const data = await this.pessoaUsecases.updatePessoa(request.user, id, request.body);
+            return data;
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to update pessoa.' });
+        }
+    }
+    async deletePessoa(request, reply) {
+        const id = parseInt(request.params.id, 10);
+        try {
+            await this.pessoaUsecases.deletePessoa(request.user, id);
+            return { message: 'Pessoa deleted successfully' };
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to delete pessoa.' });
+        }
+    }
+    async getLeadsByPessoaId(request, reply) {
+        const id = parseInt(request.params.id, 10);
+        try {
+            const data = await this.pessoaUsecases.getLeadsByPessoaId(request.user, id);
+            return data;
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to fetch related leads.' });
         }
     }
 }

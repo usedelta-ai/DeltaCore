@@ -15,6 +15,7 @@ const LeadUsecasesImpl_1 = require("./domain/usecases/LeadUsecasesImpl");
 const ChatUsecasesImpl_1 = require("./domain/usecases/ChatUsecasesImpl");
 const EvolutionUsecasesImpl_1 = require("./domain/usecases/EvolutionUsecasesImpl");
 const UserUsecasesImpl_1 = require("./domain/usecases/UserUsecasesImpl");
+const PessoaUsecasesImpl_1 = require("./domain/usecases/PessoaUsecasesImpl");
 const MainController_1 = require("./adapters/driver/http/controllers/MainController");
 const routes_1 = require("./adapters/driver/http/routes");
 const migrate_1 = require("./db/migrate");
@@ -35,7 +36,8 @@ const leadUsecases = new LeadUsecasesImpl_1.LeadUsecasesImpl(dbAdapter);
 const chatUsecases = new ChatUsecasesImpl_1.ChatUsecasesImpl(dbAdapter, evolutionAdapter);
 const evolutionUsecases = new EvolutionUsecasesImpl_1.EvolutionUsecasesImpl(evolutionAdapter);
 const userUsecases = new UserUsecasesImpl_1.UserUsecasesImpl(dbAdapter);
-const controller = new MainController_1.MainController(empresaUsecases, agentUsecases, followUpUsecases, leadUsecases, chatUsecases, evolutionUsecases, userUsecases);
+const pessoaUsecases = new PessoaUsecasesImpl_1.PessoaUsecasesImpl(dbAdapter);
+const controller = new MainController_1.MainController(empresaUsecases, agentUsecases, followUpUsecases, leadUsecases, chatUsecases, evolutionUsecases, userUsecases, pessoaUsecases);
 // Wire up HTTP routes
 (0, routes_1.setupRoutes)(app, controller);
 // Start the server

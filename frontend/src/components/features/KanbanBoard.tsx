@@ -20,6 +20,7 @@ interface KanbanBoardProps {
   onDrop?: (e: React.DragEvent, colId: string) => void;
   dragOverColumn?: string | null;
   draggedLeadId?: number | null;
+  onPessoaClick?: (pessoaId: number) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -31,9 +32,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onDrop,
   dragOverColumn,
   draggedLeadId,
+  onPessoaClick,
 }) => {
   return (
-    <div className="flex gap-gutter h-full min-h-[716px] pb-8 items-start">
+    <div className="flex gap-3.5 h-full min-h-[716px] pb-8 items-start">
       {columns.map(col => (
         <KanbanColumn
           key={col.id}
@@ -43,6 +45,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           leads={col.leads}
           emptyIcon={col.emptyIcon}
           onCardClick={onCardClick}
+          onPessoaClick={onPessoaClick}
           onDragStart={onDragStart}
           onDragOver={e => onDragOver?.(e, col.id)}
           onDragLeave={onDragLeave}

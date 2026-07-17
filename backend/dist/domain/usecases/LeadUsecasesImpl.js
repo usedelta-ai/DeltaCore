@@ -49,7 +49,62 @@ class LeadUsecasesImpl {
         if (lead.agent_id !== undefined) {
             await this.checkCompanyAccessByAgent(user, lead.agent_id);
         }
-        return this.db.updateLead(id, lead);
+        if (lead.status !== undefined) {
+            if (lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO') {
+                lead.finalized_by = user.userId;
+            }
+            else {
+                lead.finalized_by = null;
+            }
+        }
+        const updated = await this.db.updateLead(id, lead);
+        // Mapeia e insere as mudanças de campos na tabela lead_history
+        const fieldsToTrack = ['status', 'value', 'agent_id', 'name'];
+        for (const field of fieldsToTrack) {
+            if (lead[field] !== undefined && String(lead[field]) !== String(existing[field])) {
+                try {
+                    await this.db.insertLeadHistoryLog({
+                        lead_id: id,
+                        user_id: user.userId,
+                        agent_id: existing.agent_id,
+                        changed_by_agent: false,
+                        field_name: field,
+                        old_value: existing[field] ? String(existing[field]) : null,
+                        new_value: lead[field] ? String(lead[field]) : null
+                    });
+                }
+                catch (e) {
+                    console.error(`Erro ao salvar log de histórico de alteração do lead:`, e);
+                }
+            }
+        }
+        // Compara e registra alterações de custom_properties
+        if (lead.custom_properties !== undefined && lead.custom_properties !== null) {
+            const oldProps = (existing.custom_properties || {});
+            const newProps = (lead.custom_properties || {});
+            const allKeys = new Set([...Object.keys(oldProps), ...Object.keys(newProps)]);
+            for (const key of allKeys) {
+                const oldVal = oldProps[key];
+                const newVal = newProps[key];
+                if (String(oldVal) !== String(newVal)) {
+                    try {
+                        await this.db.insertLeadHistoryLog({
+                            lead_id: id,
+                            user_id: user.userId,
+                            agent_id: existing.agent_id,
+                            changed_by_agent: false,
+                            field_name: `custom_properties.${key}`,
+                            old_value: oldVal !== undefined && oldVal !== null ? String(oldVal) : null,
+                            new_value: newVal !== undefined && newVal !== null ? String(newVal) : null
+                        });
+                    }
+                    catch (e) {
+                        console.error(`Erro ao salvar log de custom_properties no histórico:`, e);
+                    }
+                }
+            }
+        }
+        return updated;
     }
     async deleteLead(user, id) {
         const existing = await this.db.getLeadById(id);

@@ -46,4 +46,11 @@ async function setupRoutes(app, controller) {
     app.post('/api/users', (req, rep) => controller.createUser(req, rep));
     app.put('/api/users/:id', (req, rep) => controller.updateUser(req, rep));
     app.delete('/api/users/:id', (req, rep) => controller.deleteUser(req, rep));
+    // Pessoas (Protected)
+    app.get('/api/pessoas', (req, rep) => controller.getPessoas(req, rep));
+    app.get('/api/pessoas/:id', (req, rep) => controller.getPessoaById(req, rep));
+    app.post('/api/pessoas', (req, rep) => controller.createPessoa(req, rep));
+    app.put('/api/pessoas/:id', (req, rep) => controller.updatePessoa(req, rep));
+    app.delete('/api/pessoas/:id', (req, rep) => controller.deletePessoa(req, rep));
+    app.get('/api/pessoas/:id/leads', (req, rep) => controller.getLeadsByPessoaId(req, rep));
 }

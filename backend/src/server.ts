@@ -11,6 +11,7 @@ import { LeadUsecasesImpl } from './domain/usecases/LeadUsecasesImpl';
 import { ChatUsecasesImpl } from './domain/usecases/ChatUsecasesImpl';
 import { EvolutionUsecasesImpl } from './domain/usecases/EvolutionUsecasesImpl';
 import { UserUsecasesImpl } from './domain/usecases/UserUsecasesImpl';
+import { PessoaUsecasesImpl } from './domain/usecases/PessoaUsecasesImpl';
 
 import { MainController } from './adapters/driver/http/controllers/MainController';
 import { setupRoutes } from './adapters/driver/http/routes';
@@ -36,6 +37,7 @@ const leadUsecases = new LeadUsecasesImpl(dbAdapter);
 const chatUsecases = new ChatUsecasesImpl(dbAdapter, evolutionAdapter);
 const evolutionUsecases = new EvolutionUsecasesImpl(evolutionAdapter);
 const userUsecases = new UserUsecasesImpl(dbAdapter);
+const pessoaUsecases = new PessoaUsecasesImpl(dbAdapter);
 
 const controller = new MainController(
   empresaUsecases,
@@ -44,7 +46,8 @@ const controller = new MainController(
   leadUsecases,
   chatUsecases,
   evolutionUsecases,
-  userUsecases
+  userUsecases,
+  pessoaUsecases
 );
 
 // Wire up HTTP routes

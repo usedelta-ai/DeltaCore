@@ -9,6 +9,7 @@ interface KanbanColumnProps {
   leads: LeadCardData[];
   emptyIcon?: string;
   onCardClick?: (id: number) => void;
+  onPessoaClick?: (pessoaId: number) => void;
   onDragStart?: (e: React.DragEvent, id: number) => void;
   onDragOver?: (e: React.DragEvent) => void;
   onDragLeave?: () => void;
@@ -31,6 +32,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   leads,
   emptyIcon = 'archive',
   onCardClick,
+  onPessoaClick,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -41,7 +43,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
   return (
     <div
-      className={`kanban-column flex flex-col flex-1 bg-surface-container-low/50 rounded-xl p-4 border ${isDragOver ? 'border-primary' : 'border-transparent'}`}
+      className={`kanban-column flex flex-col flex-1 bg-surface-container-low/50 rounded-xl p-3 border ${isDragOver ? 'border-primary' : 'border-transparent'}`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -66,6 +68,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             key={lead.id}
             lead={lead}
             onCardClick={onCardClick}
+            onPessoaClick={onPessoaClick}
             onDragStart={onDragStart}
           />
         ))}

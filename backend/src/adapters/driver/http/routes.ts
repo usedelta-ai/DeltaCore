@@ -54,4 +54,12 @@ export async function setupRoutes(app: FastifyInstance, controller: MainControll
   app.post('/api/users', (req: any, rep) => controller.createUser(req, rep));
   app.put('/api/users/:id', (req: any, rep) => controller.updateUser(req, rep));
   app.delete('/api/users/:id', (req: any, rep) => controller.deleteUser(req, rep));
+
+  // Pessoas (Protected)
+  app.get('/api/pessoas', (req, rep) => controller.getPessoas(req, rep));
+  app.get('/api/pessoas/:id', (req: any, rep) => controller.getPessoaById(req, rep));
+  app.post('/api/pessoas', (req: any, rep) => controller.createPessoa(req, rep));
+  app.put('/api/pessoas/:id', (req: any, rep) => controller.updatePessoa(req, rep));
+  app.delete('/api/pessoas/:id', (req: any, rep) => controller.deletePessoa(req, rep));
+  app.get('/api/pessoas/:id/leads', (req: any, rep) => controller.getLeadsByPessoaId(req, rep));
 }

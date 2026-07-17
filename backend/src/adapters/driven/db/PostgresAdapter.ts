@@ -5,6 +5,7 @@ import { Agent } from '../../../domain/entities/Agent';
 import { Lead } from '../../../domain/entities/Lead';
 import { FollowUpSetting, ChatMessage } from '../../../domain/entities/FollowUp';
 import { User } from '../../../domain/entities/User';
+import { Pessoa } from '../../../domain/entities/Pessoa';
 import { eq, and, sql, notInArray, desc, asc, or } from 'drizzle-orm';
 import * as schema from '../../../db/schema';
 
@@ -250,6 +251,9 @@ export class PostgresAdapter implements DBPort {
       lastmessage: schema.lead.lastmessage,
       follow_up_id: schema.lead.follow_up_id,
       session_id: schema.lead.session_id,
+      pessoa_id: schema.lead.pessoa_id,
+      finalized_by: schema.lead.finalized_by,
+      finalized_by_name: schema.users.name,
       translations: schema.agents.translations,
       agent_name: schema.agents.name,
       agent_status: schema.agents.status,
@@ -258,6 +262,7 @@ export class PostgresAdapter implements DBPort {
     .from(schema.lead)
     .leftJoin(schema.agents, eq(schema.lead.agent_id, schema.agents.id))
     .leftJoin(schema.follow_up_settings, eq(schema.lead.follow_up_id, schema.follow_up_settings.id))
+    .leftJoin(schema.users, eq(schema.lead.finalized_by, schema.users.id))
     .where(and(...conditions))
     .orderBy(desc(schema.lead.id));
 
@@ -265,7 +270,29 @@ export class PostgresAdapter implements DBPort {
   }
 
   async getLeadById(id: number): Promise<Lead | null> {
-    const res = await db.select().from(schema.lead).where(eq(schema.lead.id, id));
+    const res = await db.select({
+      id: schema.lead.id,
+      agent_id: schema.lead.agent_id,
+      remote_jid_alt: schema.lead.remote_jid_alt,
+      name: schema.lead.name,
+      custom_properties: schema.lead.custom_properties,
+      status: schema.lead.status,
+      taken_over_at: schema.lead.taken_over_at,
+      take_over_expires_at: schema.lead.take_over_expires_at,
+      updated_at: schema.lead.updated_at,
+      created_at: schema.lead.created_at,
+      taken_motive: schema.lead.taken_motive,
+      value: schema.lead.value,
+      lastmessage: schema.lead.lastmessage,
+      follow_up_id: schema.lead.follow_up_id,
+      session_id: schema.lead.session_id,
+      pessoa_id: schema.lead.pessoa_id,
+      finalized_by: schema.lead.finalized_by,
+      finalized_by_name: schema.users.name,
+    })
+    .from(schema.lead)
+    .leftJoin(schema.users, eq(schema.lead.finalized_by, schema.users.id))
+    .where(eq(schema.lead.id, id));
     return (res[0] as any) || null;
   }
 
@@ -284,6 +311,8 @@ export class PostgresAdapter implements DBPort {
         lastmessage: lead.lastmessage,
         follow_up_id: lead.follow_up_id,
         session_id: lead.session_id || null,
+        pessoa_id: lead.pessoa_id ?? null,
+        finalized_by: lead.finalized_by ?? null,
       })
       .returning();
     return res[0] as any;
@@ -314,6 +343,8 @@ export class PostgresAdapter implements DBPort {
         lastmessage: lead.lastmessage ?? oldLead.lastmessage,
         follow_up_id: lead.follow_up_id !== undefined ? lead.follow_up_id : oldLead.follow_up_id,
         session_id: lead.session_id !== undefined ? (lead.session_id || null) : oldLead.session_id,
+        pessoa_id: lead.pessoa_id !== undefined ? lead.pessoa_id : oldLead.pessoa_id,
+        finalized_by: lead.finalized_by !== undefined ? lead.finalized_by : oldLead.finalized_by,
         updated_at: new Date(),
       })
       .where(eq(schema.lead.id, id))
@@ -542,5 +573,108 @@ export class PostgresAdapter implements DBPort {
         old_value: log.old_value,
         new_value: log.new_value
       });
+  }
+
+  // Pessoas CRUD implementations
+  async getPessoas(): Promise<Pessoa[]> {
+    const res = await db.select().from(schema.pessoa).orderBy(desc(schema.pessoa.id));
+    return res as Pessoa[];
+  }
+
+  async getPessoaById(id: number): Promise<Pessoa | null> {
+    const res = await db.select().from(schema.pessoa).where(eq(schema.pessoa.id, id));
+    return (res[0] as Pessoa) || null;
+  }
+
+  async getPessoaByPhone(phone: string): Promise<Pessoa | null> {
+    const res = await db.select().from(schema.pessoa).where(eq(schema.pessoa.phone, phone));
+    return (res[0] as Pessoa) || null;
+  }
+
+  async createPessoa(pessoa: Omit<Pessoa, 'id'>): Promise<Pessoa> {
+    const res = await db.insert(schema.pessoa)
+      .values({
+        name: pessoa.name,
+        phone: pessoa.phone,
+      })
+      .returning();
+    return res[0] as Pessoa;
+  }
+
+  async updatePessoa(id: number, pessoa: Partial<Pessoa>): Promise<Pessoa> {
+    const res = await db.update(schema.pessoa)
+      .set({
+        name: pessoa.name,
+        phone: pessoa.phone,
+        updated_at: new Date(),
+      })
+      .where(eq(schema.pessoa.id, id))
+      .returning();
+    if (res.length === 0) throw new Error('Pessoa not found');
+    return res[0] as Pessoa;
+  }
+
+  async deletePessoa(id: number): Promise<boolean> {
+    const res = await db.delete(schema.pessoa).where(eq(schema.pessoa.id, id)).returning();
+    return res.length > 0;
+  }
+
+  async getLeadsByPessoaId(pessoaId: number): Promise<Lead[]> {
+    const res = await db.select({
+      id: schema.lead.id,
+      agent_id: schema.lead.agent_id,
+      remote_jid_alt: schema.lead.remote_jid_alt,
+      name: schema.lead.name,
+      custom_properties: schema.lead.custom_properties,
+      status: schema.lead.status,
+      taken_over_at: schema.lead.taken_over_at,
+      take_over_expires_at: schema.lead.take_over_expires_at,
+      updated_at: schema.lead.updated_at,
+      created_at: schema.lead.created_at,
+      taken_motive: schema.lead.taken_motive,
+      value: schema.lead.value,
+      lastmessage: schema.lead.lastmessage,
+      follow_up_id: schema.lead.follow_up_id,
+      session_id: schema.lead.session_id,
+      pessoa_id: schema.lead.pessoa_id,
+      agent_name: schema.agents.name,
+    })
+    .from(schema.lead)
+    .leftJoin(schema.agents, eq(schema.lead.agent_id, schema.agents.id))
+    .where(eq(schema.lead.pessoa_id, pessoaId))
+    .orderBy(desc(schema.lead.id));
+
+    return res as any[];
+  }
+
+  async getLeadsByPhone(phone: string): Promise<Lead[]> {
+    const res = await db.select({
+      id: schema.lead.id,
+      agent_id: schema.lead.agent_id,
+      remote_jid_alt: schema.lead.remote_jid_alt,
+      name: schema.lead.name,
+      custom_properties: schema.lead.custom_properties,
+      status: schema.lead.status,
+      taken_over_at: schema.lead.taken_over_at,
+      take_over_expires_at: schema.lead.take_over_expires_at,
+      updated_at: schema.lead.updated_at,
+      created_at: schema.lead.created_at,
+      taken_motive: schema.lead.taken_motive,
+      value: schema.lead.value,
+      lastmessage: schema.lead.lastmessage,
+      follow_up_id: schema.lead.follow_up_id,
+      session_id: schema.lead.session_id,
+      pessoa_id: schema.lead.pessoa_id,
+      agent_name: schema.agents.name,
+    })
+    .from(schema.lead)
+    .leftJoin(schema.agents, eq(schema.lead.agent_id, schema.agents.id))
+    .where(or(
+      eq(schema.lead.remote_jid_alt, phone),
+      eq(schema.lead.remote_jid_alt, `${phone}@s.whatsapp.net`)
+    ))
+    .orderBy(desc(schema.lead.id));
+
+    return res as any[];
   }
 }

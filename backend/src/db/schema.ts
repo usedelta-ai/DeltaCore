@@ -58,6 +58,15 @@ export const follow_up_settings = pgTable('follow_up_settings', {
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
+// 4.5. Tabela Pessoa
+export const pessoa = pgTable('pessoa', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  phone: varchar('phone', { length: 50 }).notNull().unique(),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
 // 5. Tabela Lead
 export const lead = pgTable('lead', {
   id: serial('id').primaryKey(),
@@ -75,6 +84,8 @@ export const lead = pgTable('lead', {
   lastmessage: text('lastmessage'),
   follow_up_id: integer('follow_up_id').references(() => follow_up_settings.id, { onDelete: 'set null' }),
   session_id: varchar('session_id', { length: 255 }),
+  pessoa_id: integer('pessoa_id').references(() => pessoa.id, { onDelete: 'set null' }),
+  finalized_by: integer('finalized_by').references(() => users.id, { onDelete: 'set null' }),
 });
 
 // 6. Tabela Messages

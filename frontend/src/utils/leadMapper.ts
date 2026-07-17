@@ -7,7 +7,7 @@ export function mapLeadToCardData(lead: Lead, agents: Agent[]): LeadCardData {
 
   let type: LeadCardData['type'] = 'human';
   let badgeVariant = 'warm';
-  let badgeLabel = 'WARM';
+  let badgeLabel = 'AQUECIDO';
   let timeAgo = formatTimeAgo(lead.created_at);
   let avatarLabel = '';
   let avatarType: 'ai' | 'human' | 'finished' | 'billed' = 'human';
@@ -25,7 +25,7 @@ export function mapLeadToCardData(lead: Lead, agents: Agent[]): LeadCardData {
     badgeLabel = 'HUMANO';
     if (agent?.status === 0) {
       badgeVariant = 'nurturing';
-      badgeLabel = 'NURTURING';
+      badgeLabel = 'NUTRINDO';
     }
     if (lead.name) {
       avatarLabel = lead.name.charAt(0).toUpperCase();
@@ -65,6 +65,10 @@ export function mapLeadToCardData(lead: Lead, agents: Agent[]): LeadCardData {
     avatarType,
     avatarSrc,
     value: lead.value,
+    takenMotive: lead.taken_motive,
+    phone: lead.remote_jid_alt?.replace('@s.whatsapp.net', '') || null,
+    pessoa_id: lead.pessoa_id,
+    finalized_by_name: lead.finalized_by_name,
   };
 }
 

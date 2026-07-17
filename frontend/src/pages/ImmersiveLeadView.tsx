@@ -4,7 +4,7 @@ import { TeamChatPanel } from '../components/features/TeamChatPanel';
 import type { TimelineDot } from '../components/features/TimelineDots';
 import { useLeadDetail } from '../hooks/useLeadDetail';
 import { api } from '../services/api';
-import type { ChatMessage, Lead } from '../services/api';
+import type { ChatMessage, Lead, Agent } from '../services/api';
 import { SideNavBar } from '../components/layout/SideNavBar';
 import { mediaCache } from '../components/features/MediaMessageRenderer';
 import { ActivityModal } from '../components/features/ActivityModal';
@@ -21,6 +21,8 @@ interface ImmersiveLeadViewProps {
   isSidebarCollapsed?: boolean;
   onToggleSidebarCollapse?: () => void;
   hasWritePermission?: boolean;
+  agents?: Agent[];
+  onPessoaClick?: (pessoaId: number) => void;
 }
 
 export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
@@ -35,6 +37,8 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
   isSidebarCollapsed = false,
   onToggleSidebarCollapse,
   hasWritePermission = true,
+  agents = [],
+  onPessoaClick,
 }) => {
   const { lead, chatHistory, timelineEvents, loading, error, refetch } = useLeadDetail(leadId);
 
@@ -43,6 +47,12 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [finalizationStep, setFinalizationStep] = useState<'ask_sale' | 'enter_value'>('ask_sale');
   const [finalizationValue, setFinalizationValue] = useState('');
+
+  const handleUpdateLead = async (updateData: Partial<Lead>) => {
+    if (!leadId) return;
+    await api.updateLead(leadId, updateData);
+    refetch();
+  };
   const [finalizationLoading, setFinalizationLoading] = useState(false);
 
   React.useEffect(() => {
@@ -301,6 +311,10 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
             formatCurrency={formatCurrency}
             formatDate={formatDate}
             onViewAllTimeline={() => setShowActivityModal(true)}
+            agents={agents}
+            onUpdateLead={handleUpdateLead}
+            hasWritePermission={hasWritePermission}
+            onPessoaClick={onPessoaClick}
           />
           <TeamChatPanel
             messages={messages}

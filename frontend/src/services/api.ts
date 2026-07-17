@@ -96,6 +96,17 @@ export interface Lead {
   follow_up_id: number | null;
   follow_up_message?: string;
   session_id?: string | null;
+  pessoa_id?: number | null;
+  finalized_by?: number | null;
+  finalized_by_name?: string;
+}
+
+export interface Pessoa {
+  id: number;
+  name: string;
+  phone: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ChatMessage {
@@ -181,6 +192,22 @@ export const api = {
   deleteLead: (id: number) => request<{ message: string }>(`/api/leads/${id}`, {
     method: 'DELETE',
   }),
+
+  // Pessoas
+  getPessoas: () => request<Pessoa[]>('/api/pessoas'),
+  getPessoaById: (id: number) => request<Pessoa>(`/api/pessoas/${id}`),
+  createPessoa: (data: Partial<Pessoa>) => request<Pessoa>('/api/pessoas', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updatePessoa: (id: number, data: Partial<Pessoa>) => request<Pessoa>(`/api/pessoas/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  deletePessoa: (id: number) => request<{ message: string }>(`/api/pessoas/${id}`, {
+    method: 'DELETE',
+  }),
+  getLeadsByPessoaId: (id: number) => request<Lead[]>(`/api/pessoas/${id}/leads`),
 
   sendPresence: (leadId: number, presence: 'composing' | 'recording') => request<any>(`/api/leads/${leadId}/presence`, {
     method: 'POST',

@@ -11,12 +11,17 @@ export interface LeadCardData {
   avatarType: 'ai' | 'human';
   avatarSrc?: string;
   value?: number | null;
+  takenMotive?: string | null;
+  phone?: string | null;
+  pessoa_id?: number | null;
+  finalized_by_name?: string;
 }
 
 interface LeadCardProps {
   lead: LeadCardData;
   onCardClick?: (id: number) => void;
   onDragStart?: (e: React.DragEvent, id: number) => void;
+  onPessoaClick?: (pessoaId: number) => void;
 }
 
 const badgeStyles: Record<string, string> = {
@@ -60,7 +65,7 @@ const typeConfig = {
   },
 };
 
-export const LeadCard: React.FC<LeadCardProps> = ({ lead, onCardClick, onDragStart }) => {
+export const LeadCard: React.FC<LeadCardProps> = ({ lead, onCardClick, onDragStart, onPessoaClick }) => {
   const type = typeConfig[lead.type];
   const badgeClass = badgeStyles[lead.badge.variant] || 'bg-surface-container-highest text-on-surface-variant';
   const avatarBg = lead.avatarType === 'ai' ? 'bg-blue-500' : 'bg-secondary';
@@ -102,9 +107,48 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, onCardClick, onDragSta
           {type.icon}
         </span>
       </div>
-      <h3 className="font-headline-md text-body-md text-on-surface mb-1">{lead.name}</h3>
-      <p className="text-body-sm text-on-surface-variant mb-3">{lead.company}</p>
-      <div className="flex items-center justify-between mt-4 pt-3 border-t border-border-low-contrast">
+      <div className="flex justify-between items-center mb-0.5">
+        <h3 className="font-headline-md text-body-md text-on-surface">{lead.name}</h3>
+        {lead.pessoa_id && (
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              onPessoaClick?.(lead.pessoa_id!);
+            }}
+            title="Ver/Editar Cadastro de Pessoa"
+            className="w-7 h-7 flex items-center justify-center rounded-full bg-primary/5 border border-primary/10 hover:bg-primary/10 hover:border-primary/30 text-primary transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[16px]">contact_page</span>
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-body-sm text-on-surface-variant mb-2">
+        {lead.company && <span>{lead.company}</span>}
+        {lead.company && lead.phone && <span className="opacity-40">•</span>}
+        {lead.phone && <span className="font-mono text-[11px]">{lead.phone}</span>}
+      </div>
+
+      {lead.type === 'human' && lead.takenMotive && (
+        <div className="mt-2.5 mb-3 bg-secondary-container/10 border border-secondary/20 p-2.5 rounded-lg text-secondary">
+          <div className="flex items-center gap-1 mb-1">
+            <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>info</span>
+            <span className="font-bold text-[8.5px] uppercase tracking-wider">Motivo da Transferência</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-on-surface-variant line-clamp-2">{lead.takenMotive}</p>
+        </div>
+      )}
+
+      {(lead.type === 'finished' || lead.type === 'billed') && lead.finalized_by_name && (
+        <div className="mt-2.5 mb-3 bg-primary/5 border border-primary/20 p-2.5 rounded-lg text-primary">
+          <div className="flex items-center gap-1 mb-1">
+            <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+            <span className="font-bold text-[8.5px] uppercase tracking-wider">Finalizado por</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-on-surface-variant font-semibold">{lead.finalized_by_name}</p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border-low-contrast">
         <div className="flex items-center gap-1.5 text-on-surface-variant">
           <span className="material-symbols-outlined text-[16px]" data-icon="schedule">schedule</span>
           <span className="text-label-md uppercase">{lead.timeAgo}</span>
