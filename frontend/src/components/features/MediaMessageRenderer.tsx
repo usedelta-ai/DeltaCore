@@ -223,7 +223,7 @@ export const MediaMessageRenderer: React.FC<MediaMessageRendererProps> = ({
         <img
           src={mediaData}
           alt="Mídia"
-          className="max-w-full max-h-[250px] rounded-lg mt-1 cursor-pointer transition-transform duration-200 hover:scale-[1.02] shadow-md"
+          className="w-[240px] h-[180px] object-cover rounded-lg mt-1 cursor-pointer transition-transform duration-200 hover:scale-[1.02] shadow-md bg-surface-container-low"
           onClick={() => setIsModalOpen(true)}
           onLoad={() => {
             window.dispatchEvent(new CustomEvent('chat-media-loaded'));

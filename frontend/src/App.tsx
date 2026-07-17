@@ -672,25 +672,36 @@ export default function App() {
 
   if (leadViewMode === 'immersive') {
     return (
-      <ImmersiveLeadView
-        leadId={selectedImmersiveLeadId ?? undefined}
-        onBack={handleBackFromImmersive}
-        systemLogo={systemLogo}
-        userName={user?.name}
-        isSuperAdmin={isSuperAdmin}
-        systemName={systemName}
-        onTabChange={navigateToTab}
-        onLogout={handleLogout}
-        isSidebarCollapsed={isMainSidebarCollapsed}
-        onToggleSidebarCollapse={() => {
-          const next = !isMainSidebarCollapsed;
-          setIsMainSidebarCollapsed(next);
-          localStorage.setItem('sidebar_collapsed', String(next));
-        }}
-        hasWritePermission={hasWritePermission}
-        agents={getFilteredAgents()}
-        onPessoaClick={setSelectedPessoaId}
-      />
+      <>
+        <ImmersiveLeadView
+          leadId={selectedImmersiveLeadId ?? undefined}
+          onBack={handleBackFromImmersive}
+          systemLogo={systemLogo}
+          userName={user?.name}
+          isSuperAdmin={isSuperAdmin}
+          systemName={systemName}
+          onTabChange={navigateToTab}
+          onLogout={handleLogout}
+          isSidebarCollapsed={isMainSidebarCollapsed}
+          onToggleSidebarCollapse={() => {
+            const next = !isMainSidebarCollapsed;
+            setIsMainSidebarCollapsed(next);
+            localStorage.setItem('sidebar_collapsed', String(next));
+          }}
+          hasWritePermission={hasWritePermission}
+          agents={getFilteredAgents()}
+          onPessoaClick={setSelectedPessoaId}
+        />
+        {selectedPessoaId !== null && (
+          <PessoaModal
+            pessoaId={selectedPessoaId}
+            onClose={() => setSelectedPessoaId(null)}
+            onLeadClick={(leadId) => {
+              handleLeadClick(leadId);
+            }}
+          />
+        )}
+      </>
     );
   }
 
@@ -828,7 +839,7 @@ export default function App() {
         )}
 
         {activeTab === 'users' && isSuperAdmin && (
-          <UsersPage empresas={empresas} />
+          <UsersPage empresas={empresas} token={token} />
         )}
 
         {activeTab === 'pessoas' && (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Select } from './Select';
-import type { SelectOption } from './Select';
+import type { SelectOption, SelectProps } from './Select';
 
 interface FormInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -35,10 +35,8 @@ export const FormInput: React.FC<FormInputProps> = ({
   );
 };
 
-interface FormSelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+interface FormSelectProps extends SelectProps {
   label: string;
-  error?: string | null;
-  options: SelectOption[];
 }
 
 export const FormSelect: React.FC<FormSelectProps> = ({

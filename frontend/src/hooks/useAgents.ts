@@ -1,73 +1,63 @@
-import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import type { Agent } from '../services/api';
 
 export function useAgents(token: string | null) {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchAgents = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.getAgents();
-      setAgents(data);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao buscar agentes');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    data: agents = [],
+    isLoading: loading,
+    error: queryError,
+    refetch,
+  } = useQuery<Agent[]>({
+    queryKey: ['agents'],
+    queryFn: () => api.getAgents(),
+    enabled: !!token,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (agentData: Partial<Agent>) => api.createAgent(agentData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, agentData }: { id: number; agentData: Partial<Agent> }) =>
+      api.updateAgent(id, agentData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.deleteAgent(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+    },
+  });
 
   const createAgent = async (agentData: Partial<Agent>) => {
-    setError(null);
-    try {
-      const newAgent = await api.createAgent(agentData);
-      setAgents((prev) => [newAgent, ...prev]);
-      return newAgent;
-    } catch (err: any) {
-      setError(err.message || 'Erro ao criar agente');
-      throw err;
-    }
+    return createMutation.mutateAsync(agentData);
   };
 
   const updateAgent = async (id: number, agentData: Partial<Agent>) => {
-    setError(null);
-    try {
-      const updated = await api.updateAgent(id, agentData);
-      setAgents((prev) => prev.map((a) => (a.id === id ? updated : a)));
-      return updated;
-    } catch (err: any) {
-      setError(err.message || 'Erro ao atualizar agente');
-      throw err;
-    }
+    return updateMutation.mutateAsync({ id, agentData });
   };
 
   const deleteAgent = async (id: number) => {
-    setError(null);
-    try {
-      await api.deleteAgent(id);
-      setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, status: 0 } : a)));
-    } catch (err: any) {
-      setError(err.message || 'Erro ao excluir agente');
-      throw err;
-    }
+    // Return void or promise to match previous behavior
+    await deleteMutation.mutateAsync(id);
   };
 
-  useEffect(() => {
-    if (token) {
-      fetchAgents();
-    } else {
-      setAgents([]);
-    }
-  }, [token]);
+  const error = queryError ? (queryError as Error).message : null;
 
   return {
     agents,
     loading,
     error,
-    refetch: fetchAgents,
+    refetch,
     createAgent,
     updateAgent,
     deleteAgent,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { LeadAvatar } from './LeadAvatar';
 
 export interface LeadCardData {
   id: number;
@@ -154,15 +155,12 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, onCardClick, onDragSta
           <span className="text-label-md uppercase">{lead.timeAgo}</span>
         </div>
         <div className="flex -space-x-2">
-          <div className={`w-6 h-6 rounded-full border-2 border-surface ${avatarBg} flex items-center justify-center text-[10px] text-white font-bold`}>
-            {lead.avatarType === 'ai' ? (
-              'Δ'
-            ) : lead.avatarSrc ? (
-              <img src={lead.avatarSrc} alt="" className="w-full h-full rounded-full object-cover" />
-            ) : (
-              lead.avatarLabel
-            )}
-          </div>
+          <LeadAvatar
+            leadId={lead.id}
+            avatarType={lead.avatarType}
+            avatarLabel={lead.avatarLabel}
+            className="w-6 h-6 text-[10px] border-2 border-surface shadow-sm"
+          />
         </div>
       </div>
     </div>

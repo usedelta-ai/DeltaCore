@@ -182,6 +182,16 @@ export class MainController {
     }
   }
 
+  async getLeadAvatar(request: FastifyRequest<{ Params: { leadId: string } }>, reply: FastifyReply) {
+    const leadId = parseInt(request.params.leadId, 10);
+    try {
+      const url = await this.leadUsecases.getLeadAvatar(request.user!, leadId);
+      return { url };
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to fetch lead avatar.' });
+    }
+  }
+
   async createLead(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
     try {
       const data = await this.leadUsecases.createLead(request.user!, request.body as any);

@@ -1,10 +1,14 @@
 import { LeadUsecases } from '../../ports/driver/LeadUsecases';
 import { DBPort } from '../../ports/driven/DBPort';
+import { EvolutionAPIPort } from '../../ports/driven/EvolutionAPIPort';
 import { UserSession } from '../../adapters/driver/http/middlewares/AuthMiddleware';
 import { Lead, isValidLeadStatus } from '../entities/Lead';
 
 export class LeadUsecasesImpl implements LeadUsecases {
-  constructor(private db: DBPort) {}
+  constructor(
+    private db: DBPort,
+    private evolution: EvolutionAPIPort
+  ) {}
 
   private async checkCompanyAccessByAgent(user: UserSession, agentId: number) {
     if (user.role !== 'superadmin') {
@@ -117,5 +121,33 @@ export class LeadUsecasesImpl implements LeadUsecases {
     if (!existing) throw new Error('Lead not found');
     await this.checkCompanyAccessByAgent(user, existing.agent_id);
     return this.db.deleteLead(id);
+  }
+
+  async getLeadAvatar(user: UserSession, id: number): Promise<string | null> {
+    const lead = await this.db.getLeadById(id);
+    if (!lead) return null;
+
+    if (user.role !== 'superadmin') {
+      const agent = await this.db.getAgentById(lead.agent_id);
+      if (!agent || agent.empresa_id !== user.companyId) {
+        throw new Error('Unauthorized: You do not have access to this company\'s resources');
+      }
+    }
+
+    const agent = await this.db.getAgentById(lead.agent_id);
+    if (!agent || !agent.instance_name) return null;
+
+    try {
+      let number = lead.remote_jid_alt;
+      if (number.includes('@')) {
+        number = number.split('@')[0];
+      }
+      
+      const response = await this.evolution.fetchProfilePictureUrl(agent.instance_name, number);
+      return response?.profilePictureUrl || null;
+    } catch (err) {
+      console.warn(`Could not fetch profile picture for lead ${id} from Evolution:`, err);
+      return null;
+    }
   }
 }

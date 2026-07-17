@@ -6,6 +6,7 @@ import { Badge } from '../components/ui/Badge';
 import { ConfirmationModal } from '../components/Modal';
 import { formatWhatsAppText } from '../utils/whatsappFormat';
 import { MediaMessageRenderer } from '../components/features/MediaMessageRenderer';
+import { LeadAvatar } from '../components/features/LeadAvatar';
 
 interface LeadsPageProps {
   updateLead: (id: number, data: Partial<Lead>) => Promise<any>;
@@ -1065,9 +1066,12 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
             <div className="wpp-chat-panel">
               <div className="wpp-chat-header">
                 <div className="wpp-chat-user-info">
-                  <div className="wpp-chat-avatar">
-                    {(selectedLeadForModal.name || 'S')[0].toUpperCase()}
-                  </div>
+                  <LeadAvatar
+                    leadId={selectedLeadForModal.id}
+                    avatarType={selectedLeadForModal.status === 'NOVO' ? 'ai' : 'human'}
+                    avatarLabel={(selectedLeadForModal.name || 'S')[0].toUpperCase()}
+                    className="w-10 h-10 text-sm border-2 border-white/20 shadow-md"
+                  />
                   <div>
                     <div className="wpp-chat-name">{selectedLeadForModal.name || 'Sem nome'}</div>
                     <div className="wpp-chat-status">

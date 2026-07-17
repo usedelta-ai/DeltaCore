@@ -1,73 +1,65 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import type { Lead } from '../services/api';
 
 export function useLeads(token: string | null, empresaId?: string | number, agentId?: string | number) {
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchLeads = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.getLeads(String(empresaId || ''), String(agentId || ''));
-      setLeads(data);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao buscar leads');
-    } finally {
-      setLoading(false);
-    }
-  }, [empresaId, agentId]);
+  const {
+    data: leads = [],
+    isLoading: loading,
+    isFetching,
+    error: queryError,
+    refetch,
+  } = useQuery<Lead[]>({
+    queryKey: ['leads', { empresaId, agentId }],
+    queryFn: () => api.getLeads(String(empresaId || ''), String(agentId || '')),
+    enabled: !!token,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (leadData: Partial<Lead>) => api.createLead(leadData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, leadData }: { id: number; leadData: Partial<Lead> }) =>
+      api.updateLead(id, leadData),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['lead', variables.id] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.deleteLead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    },
+  });
 
   const createLead = async (leadData: Partial<Lead>) => {
-    setError(null);
-    try {
-      const newLead = await api.createLead(leadData);
-      setLeads((prev) => [newLead, ...prev]);
-      return newLead;
-    } catch (err: any) {
-      setError(err.message || 'Erro ao criar lead');
-      throw err;
-    }
+    return createMutation.mutateAsync(leadData);
   };
 
   const updateLead = async (id: number, leadData: Partial<Lead>) => {
-    setError(null);
-    try {
-      const updated = await api.updateLead(id, leadData);
-      setLeads((prev) => prev.map((l) => (l.id === id ? updated : l)));
-      return updated;
-    } catch (err: any) {
-      setError(err.message || 'Erro ao atualizar lead');
-      throw err;
-    }
+    return updateMutation.mutateAsync({ id, leadData });
   };
 
   const deleteLead = async (id: number) => {
-    setError(null);
-    try {
-      await api.deleteLead(id);
-      setLeads((prev) => prev.filter((l) => l.id !== id));
-    } catch (err: any) {
-      setError(err.message || 'Erro ao excluir lead');
-      throw err;
-    }
+    await deleteMutation.mutateAsync(id);
   };
 
-  useEffect(() => {
-    if (token) {
-      fetchLeads();
-    } else {
-      setLeads([]);
-    }
-  }, [token, fetchLeads]);
+  const error = queryError ? (queryError as Error).message : null;
 
   return {
     leads,
     loading,
+    isFetching,
     error,
-    refetch: fetchLeads,
+    refetch,
     createLead,
     updateLead,
     deleteLead,

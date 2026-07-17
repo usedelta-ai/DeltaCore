@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { api, type Pessoa, type Lead } from '../../services/api';
-import { CheckCircle, XCircle, X, ArrowLeft, User, Phone, Calendar, Save, Users } from 'lucide-react';
+import { api, type Lead, type Agent, type Empresa } from '../../services/api';
+import { CheckCircle, XCircle, X, ArrowLeft, User, Phone, Calendar, Save, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { useLeadAvatar } from '../../hooks/useLeadAvatar';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface PessoaModalProps {
   pessoaId: number;
@@ -19,7 +21,7 @@ interface FeedbackModalProps {
 const FeedbackModal: React.FC<FeedbackModalProps> = ({ type, title, message, onClose }) => (
   <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
     <div
-      className="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-sm flex flex-col items-center text-center gap-4 border border-border-low-contrast"
+      className="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-sm flex flex-col items-center text-center gap-4 border border-border-low-contrast animate-fade-in"
       onClick={e => e.stopPropagation()}
     >
       {type === 'success'
@@ -61,37 +63,62 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 
 // ------ Main component ------
 export const PessoaModal: React.FC<PessoaModalProps> = ({ pessoaId, onClose, onLeadClick }) => {
-  const [pessoa, setPessoa] = useState<Pessoa | null>(null);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; title: string; message: string } | null>(null);
   const [agentFilter, setAgentFilter] = useState<string>('all');
+  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({});
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
 
+  // Fetch all data in parallel via TanStack Query
+  const { data, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['pessoaModal', pessoaId],
+    queryFn: async () => {
+      const [pessoaData, leadsData, agentsData, empresasData] = await Promise.all([
+        api.getPessoaById(pessoaId),
+        api.getLeadsByPessoaId(pessoaId),
+        api.getAgents().catch(() => [] as Agent[]),
+        api.getEmpresas().catch(() => [] as Empresa[]),
+      ]);
+      return { pessoa: pessoaData, leads: leadsData, agents: agentsData, empresas: empresasData };
+    },
+    enabled: !!pessoaId,
+    staleTime: 1000 * 30,
+  });
+
+  const pessoa = data?.pessoa ?? null;
+  const leads = data?.leads ?? [];
+  const agents = data?.agents ?? [];
+  const empresas = data?.empresas ?? [];
+  const error = queryError ? (queryError as Error).message : null;
+
+  // Sync form fields when data arrives
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [pessoaData, leadsData] = await Promise.all([
-          api.getPessoaById(pessoaId),
-          api.getLeadsByPessoaId(pessoaId),
-        ]);
-        setPessoa(pessoaData);
-        setName(pessoaData.name);
-        setPhone(pessoaData.phone);
-        setLeads(leadsData);
-      } catch (err: any) {
-        setError(err.message || 'Erro ao carregar dados.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [pessoaId]);
+    if (data?.pessoa) {
+      setName(data.pessoa.name);
+      setPhone(data.pessoa.phone);
+    }
+  }, [data?.pessoa]);
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: { name: string; phone: string }) =>
+      api.updatePessoa(pessoaId, payload),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['pessoaModal', pessoaId], (old: any) =>
+        old ? { ...old, pessoa: updated } : old
+      );
+      queryClient.invalidateQueries({ queryKey: ['pessoas'] });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+      setFeedback({ type: 'success', title: 'Salvo com sucesso!', message: 'Os dados da pessoa foram atualizados.' });
+    },
+    onError: (err: any) => {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 4000);
+      setFeedback({ type: 'error', title: 'Erro ao salvar', message: err.message || 'Não foi possível salvar as alterações.' });
+    },
+  });
 
   // Block page scroll while open
   useEffect(() => {
@@ -112,17 +139,7 @@ export const PessoaModal: React.FC<PessoaModalProps> = ({ pessoaId, onClose, onL
       return;
     }
     setSaveStatus('saving');
-    try {
-      const updated = await api.updatePessoa(pessoaId, { name, phone });
-      setPessoa(updated);
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2500);
-      setFeedback({ type: 'success', title: 'Salvo com sucesso!', message: 'Os dados da pessoa foram atualizados.' });
-    } catch (err: any) {
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 4000);
-      setFeedback({ type: 'error', title: 'Erro ao salvar', message: err.message || 'Não foi possível salvar as alterações.' });
-    }
+    updateMutation.mutate({ name, phone });
   };
 
   const formatDate = (dateStr?: string | Date | null) => {
@@ -175,6 +192,17 @@ export const PessoaModal: React.FC<PessoaModalProps> = ({ pessoaId, onClose, onL
     return groups;
   }, [filteredLeads]);
 
+  // Most recent lead ID — used to fetch the contact's WhatsApp profile picture
+  const mostRecentLeadId = useMemo(() => {
+    if (!leads.length) return undefined;
+    const sorted = [...leads].sort(
+      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    );
+    return sorted[0]?.id;
+  }, [leads]);
+
+  const { data: contactAvatarSrc } = useLeadAvatar(mostRecentLeadId);
+
   return (
     <>
       {/* Full-screen overlay */}
@@ -201,8 +229,20 @@ export const PessoaModal: React.FC<PessoaModalProps> = ({ pessoaId, onClose, onL
 
           {/* Avatar */}
           <div className="flex flex-col items-center pt-8 pb-6 px-6 border-b border-border-low-contrast">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20 mb-4">
-              <User size={36} className="text-white" />
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20 mb-4 overflow-hidden">
+              {contactAvatarSrc ? (
+                <img
+                  src={contactAvatarSrc}
+                  alt={pessoa?.name || 'Contato'}
+                  className="w-full h-full object-cover"
+                />
+              ) : pessoa?.name ? (
+                <span className="text-white font-extrabold text-3xl select-none">
+                  {pessoa.name.charAt(0).toUpperCase()}
+                </span>
+              ) : (
+                <User size={36} className="text-white" />
+              )}
             </div>
             {!loading && pessoa && (
               <>
@@ -345,67 +385,105 @@ export const PessoaModal: React.FC<PessoaModalProps> = ({ pessoaId, onClose, onL
                 </div>
               </div>
             ) : (
-              <div className="space-y-8">
+              <div className="space-y-4">
                 {Object.entries(leadsByAgent).map(([agentId, agentLeads]) => {
                   const agentName = agentNames[agentId] || 'Sem agente';
-                  return (
-                    <div key={agentId}>
-                      {/* Agent group header */}
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-                          <span className="material-symbols-outlined text-primary text-[16px]">smart_toy</span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-extrabold text-on-surface">{agentName}</p>
-                          <p className="text-[11px] text-on-surface-variant">{agentLeads.length} lead{agentLeads.length !== 1 ? 's' : ''}</p>
-                        </div>
-                        <div className="flex-1 h-px bg-border-low-contrast ml-2" />
-                      </div>
+                  const agentObj = agents.find(a => String(a.id) === agentId);
+                  const empresaObj = empresas.find(e => e.id === agentObj?.empresa_id);
+                  const companyLogo = empresaObj?.logo;
+                  const companyName = empresaObj?.name || agentObj?.empresa_name || 'DeltaAI';
+                  const isExpanded = expandedAgents[agentId] === true;
 
-                      {/* Leads table for this agent */}
-                      <div className="bg-white rounded-2xl border border-border-low-contrast shadow-sm overflow-hidden">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="bg-surface-container-low border-b border-border-low-contrast text-[11px] font-extrabold uppercase tracking-wide text-on-surface-variant">
-                              <th className="px-5 py-3">Lead</th>
-                              <th className="px-5 py-3">Status</th>
-                              <th className="px-5 py-3">Valor</th>
-                              <th className="px-5 py-3">Criado em</th>
-                              <th className="px-5 py-3 text-right">Ações</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border-low-contrast">
-                            {agentLeads.map(ld => (
-                              <tr key={ld.id} className="hover:bg-surface-container-lowest transition-colors">
-                                <td className="px-5 py-3.5">
-                                  <div>
-                                    <span className="font-extrabold text-primary text-sm">#{ld.id}</span>
-                                    {ld.name && (
-                                      <p className="text-xs text-on-surface-variant mt-0.5 truncate max-w-[160px]">{ld.name}</p>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-5 py-3.5"><StatusBadge status={ld.status} /></td>
-                                <td className="px-5 py-3.5">
-                                  <span className="text-sm font-bold text-status-success">{formatCurrency(ld.value)}</span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className="text-xs text-on-surface-variant font-medium">{formatDateTime(ld.created_at)}</span>
-                                </td>
-                                <td className="px-5 py-3.5 text-right">
-                                  <button
-                                    onClick={() => onLeadClick && ld.id && onLeadClick(ld.id)}
-                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-primary/5 hover:bg-primary/10 border border-primary/20 hover:border-primary/50 rounded-lg text-primary text-xs font-bold transition-all cursor-pointer"
-                                  >
-                                    <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-                                    Abrir Lead
-                                  </button>
-                                </td>
+                  const toggleGroup = () => {
+                    setExpandedAgents(prev => ({
+                      ...prev,
+                      [agentId]: !isExpanded
+                    }));
+                  };
+
+                  return (
+                    <div key={agentId} className="flex flex-col gap-2">
+                      {/* Collapsible header */}
+                      <button
+                        type="button"
+                        onClick={toggleGroup}
+                        className="w-full flex items-center justify-between p-4 bg-white border border-border-low-contrast rounded-xl shadow-sm hover:bg-surface-container-low transition-colors cursor-pointer text-left focus:outline-none"
+                      >
+                        <div className="flex items-center gap-3">
+                          {companyLogo ? (
+                            <img
+                              src={companyLogo.startsWith('data:') ? companyLogo : `data:image/png;base64,${companyLogo}`}
+                              alt={companyName}
+                              className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-border-low-contrast"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0 border border-primary/20">
+                              <span className="material-symbols-outlined text-primary text-[18px]">business</span>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-extrabold text-on-surface">
+                              {agentName}
+                              <span className="ml-1.5 px-2 py-0.5 bg-surface-container-high rounded text-[10px] font-bold text-on-surface-variant">
+                                {companyName}
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-on-surface-variant font-medium mt-0.5">
+                              {agentLeads.length} lead{agentLeads.length !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-on-surface-variant flex items-center justify-center">
+                          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        </div>
+                      </button>
+
+                      {/* Leads table (collapsible) */}
+                      {isExpanded && (
+                        <div className="bg-white rounded-2xl border border-border-low-contrast shadow-sm overflow-hidden animate-fade-in mb-4">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-surface-container-low border-b border-border-low-contrast text-[11px] font-extrabold uppercase tracking-wide text-on-surface-variant">
+                                <th className="px-5 py-3">Lead</th>
+                                <th className="px-5 py-3">Status</th>
+                                <th className="px-5 py-3">Valor</th>
+                                <th className="px-5 py-3">Criado em</th>
+                                <th className="px-5 py-3 text-right">Ações</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody className="divide-y divide-border-low-contrast">
+                              {agentLeads.map(ld => (
+                                <tr key={ld.id} className="hover:bg-surface-container-lowest transition-colors">
+                                  <td className="px-5 py-3.5">
+                                    <div>
+                                      <span className="font-extrabold text-primary text-sm">#{ld.id}</span>
+                                      {ld.name && (
+                                        <p className="text-xs text-on-surface-variant mt-0.5 truncate max-w-[160px]">{ld.name}</p>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-5 py-3.5"><StatusBadge status={ld.status} /></td>
+                                  <td className="px-5 py-3.5">
+                                    <span className="text-sm font-bold text-status-success">{formatCurrency(ld.value)}</span>
+                                  </td>
+                                  <td className="px-5 py-3.5">
+                                    <span className="text-xs text-on-surface-variant font-medium">{formatDateTime(ld.created_at)}</span>
+                                  </td>
+                                  <td className="px-5 py-3.5 text-right">
+                                    <button
+                                      onClick={() => onLeadClick && ld.id && onLeadClick(ld.id)}
+                                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-primary/5 hover:bg-primary/10 border border-primary/20 hover:border-primary/50 rounded-lg text-primary text-xs font-bold transition-all cursor-pointer"
+                                    >
+                                      <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                                      Abrir Lead
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

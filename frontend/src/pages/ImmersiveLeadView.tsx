@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { LeadCoreInfoPanel } from '../components/features/LeadCoreInfoPanel';
 import { TeamChatPanel } from '../components/features/TeamChatPanel';
 import type { TimelineDot } from '../components/features/TimelineDots';
 import { useLeadDetail } from '../hooks/useLeadDetail';
@@ -8,6 +7,7 @@ import type { ChatMessage, Lead, Agent } from '../services/api';
 import { SideNavBar } from '../components/layout/SideNavBar';
 import { mediaCache } from '../components/features/MediaMessageRenderer';
 import { ActivityModal } from '../components/features/ActivityModal';
+import { LeadAvatar } from '../components/features/LeadAvatar';
 
 interface ImmersiveLeadViewProps {
   leadId?: number;
@@ -240,44 +240,58 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
       {/* Main Content with dynamic margin for sidebar collapse */}
       <main className={`flex-1 flex flex-col h-screen bg-surface-subtle ${isSidebarCollapsed ? 'ml-20' : 'ml-64'} transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]`}>
         {/* Immersive Header */}
-        <header className="h-20 border-b border-border-low-contrast bg-white flex justify-between items-center px-8 z-40">
-          <div className="flex items-center gap-6">
+        <header className="h-16 border-b border-border-low-contrast bg-surface flex items-center justify-between px-6 shrink-0 relative z-10">
+          <div className="flex items-center gap-4" id="info-header">
             <button
-              className="p-2 hover:bg-surface-container rounded-full transition-colors text-on-surface-variant cursor-pointer"
+              className="text-on-surface-variant hover:text-primary transition-colors rounded-full p-1 hover:bg-surface-container cursor-pointer"
               onClick={onBack}
             >
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
             <div className="flex items-center gap-3">
-              <div className="w-1 h-8 bg-primary rounded-full" />
+              <LeadAvatar
+                leadId={lead.id!}
+                avatarType={lead.status === 'NOVO' ? 'ai' : 'human'}
+                avatarLabel={(lead.name || 'L')[0].toUpperCase()}
+                className="w-10 h-10 text-sm shadow-sm"
+              />
               <div>
-                <h2 className="text-headline-md font-headline-md leading-none">{lead.name || 'Sem nome'}</h2>
-                <p className="text-label-md font-label-md text-on-surface-variant mt-1">
-                  #{lead.id} • {lead.remote_jid_alt?.replace('@s.whatsapp.net', '') || 'Sem telefone'}
-                </p>
+                <h1 className="font-headline text-body-lg font-bold text-on-surface flex items-center gap-2">
+                  {lead.name || 'Sem nome'}
+                </h1>
+                <div className="flex items-center gap-2 text-label-md text-on-surface-variant">
+                  <span>#{lead.id}</span>
+                  <span>•</span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-container-high text-label-md">
+                    <span className={`w-2 h-2 rounded-full ${
+                      lead.status === 'NOVO' ? 'bg-primary' :
+                      lead.status === 'HUMANO' ? 'bg-primary' :
+                      lead.status === 'CANCELADO' ? 'bg-error' : 'bg-green-600'
+                    }`}></span>
+                    {lead.status === 'NOVO' ? 'Novo Lead' :
+                     lead.status === 'HUMANO' ? 'Em Atendimento' :
+                     lead.status === 'FINALIZADO' ? 'Finalizado' :
+                     lead.status === 'CONCLUIDO' ? 'Faturado' : 'Cancelado'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className={`hidden md:flex border rounded-full px-4 py-1.5 items-center gap-2 ${lead.status === 'NOVO' ? 'bg-primary-fixed/20 border-primary/20' : lead.status === 'HUMANO' ? 'bg-tertiary-fixed/20 border-tertiary-fixed/20' : 'bg-status-success/10 border-status-success/20'}`}>
-              <span className={`w-2 h-2 rounded-full ${lead.status === 'NOVO' ? 'bg-ai-accent' : lead.status === 'HUMANO' ? 'bg-secondary' : 'bg-status-success'}`} />
-              <span className="text-label-md font-label-md">
-                {lead.status === 'NOVO' ? 'Novo Lead' :
-                 lead.status === 'HUMANO' ? 'Em Atendimento' :
-                 lead.status === 'FINALIZADO' ? 'Finalizado' :
-                 lead.status === 'CONCLUIDO' ? 'Faturado' : 'Cancelado'}
-              </span>
-            </div>
-            <button className="px-6 py-2 border border-border-low-contrast rounded-xl font-label-md text-label-md hover:bg-surface-container transition-colors cursor-pointer" onClick={onBack}>
+          <div className="flex items-center gap-3">
+            <button 
+              className="px-4 py-2 rounded-md border border-border-low-contrast text-body-sm font-medium hover:bg-surface-container transition-colors cursor-pointer bg-transparent text-on-surface"
+              onClick={onBack}
+            >
               Fechar
             </button>
             {lead.status === 'NOVO' && (
               <button
                 onClick={handleQuickAssume}
-                className="px-6 py-2 bg-primary text-on-primary rounded-xl font-label-md text-label-md hover:opacity-90 transition-opacity shadow-md shadow-primary/20 cursor-pointer"
+                className="px-4 py-2 rounded-md bg-primary text-on-primary text-body-sm font-medium hover:bg-primary-container transition-colors flex items-center gap-2 shadow-sm cursor-pointer border-none"
               >
-                🤝 Assumir Atendimento
+                <span className="material-symbols-outlined text-[18px]">handshake</span>
+                Assumir Atendimento
               </button>
             )}
             {lead.status === 'HUMANO' && (
@@ -287,35 +301,26 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
                   setFinalizationValue('');
                   setShowFinalizationModal(true);
                 }}
-                className="px-6 py-2 bg-primary text-on-primary rounded-xl font-label-md text-label-md hover:opacity-90 transition-opacity shadow-md shadow-primary/20 cursor-pointer"
+                className="px-4 py-2 rounded-md bg-primary text-on-primary text-body-sm font-medium hover:bg-primary-container transition-colors flex items-center gap-2 shadow-sm cursor-pointer border-none"
               >
-                ✅ Finalizar Atendimento
+                <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                Finalizar Atendimento
               </button>
             )}
-            {lead.status !== 'CANCELADO' && lead.status !== 'FINALIZADO' && lead.status !== 'CONCLUIDO' && hasWritePermission && (
+            {lead.status !== 'CANCELADO' && lead.status !== 'FINALIZADO' && lead.status !== 'CONCLUIDO' && hasWritePermission && localStorage.getItem('user-role') === 'superadmin' && (
               <button
                 onClick={handleQuickCancel}
-                className="px-6 py-2 border border-status-critical text-status-critical hover:bg-status-critical/10 rounded-xl font-label-md text-label-md transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-md border border-error text-error text-body-sm font-medium hover:bg-error-container/20 transition-colors flex items-center gap-2 cursor-pointer bg-transparent"
               >
-                🚫 Cancelar Atendimento
+                <span className="material-symbols-outlined text-[18px]">cancel</span>
+                Cancelar Atendimento
               </button>
             )}
           </div>
         </header>
 
-        {/* Split Layout */}
+        {/* Full-width Chat Area */}
         <div className="flex-1 flex overflow-hidden">
-          <LeadCoreInfoPanel
-            lead={lead}
-            timelineDots={defaultTimelineDots}
-            formatCurrency={formatCurrency}
-            formatDate={formatDate}
-            onViewAllTimeline={() => setShowActivityModal(true)}
-            agents={agents}
-            onUpdateLead={handleUpdateLead}
-            hasWritePermission={hasWritePermission}
-            onPessoaClick={onPessoaClick}
-          />
           <TeamChatPanel
             messages={messages}
             onSendMessage={handleSendMessage}
@@ -326,6 +331,15 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
             systemLogo={systemLogo}
             leadStatus={lead.status}
             finalizedAt={lead.updated_at || undefined}
+            lead={lead}
+            agents={agents}
+            timelineDots={defaultTimelineDots}
+            onViewAllTimeline={() => setShowActivityModal(true)}
+            onUpdateLead={handleUpdateLead}
+            hasWritePermission={hasWritePermission}
+            onPessoaClick={onPessoaClick}
+            formatCurrency={formatCurrency}
+            formatDate={formatDate}
           />
         </div>
       </main>

@@ -7,4 +7,5 @@ export interface LeadUsecases {
   createLead(user: UserSession, lead: Omit<Lead, 'id'>): Promise<Lead>;
   updateLead(user: UserSession, id: number, lead: Partial<Lead>): Promise<Lead>;
   deleteLead(user: UserSession, id: number): Promise<boolean>;
+  getLeadAvatar(user: UserSession, id: number): Promise<string | null>;
 }

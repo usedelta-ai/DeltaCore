@@ -7,6 +7,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { FormInput } from '../components/ui/FormInput';
+import { Pagination } from '../components/ui/Pagination';
 
 interface EmpresasPageProps {
   empresas: Empresa[];
@@ -53,6 +54,8 @@ export const EmpresasPage: React.FC<EmpresasPageProps> = ({
   setDeleteModal,
 }) => {
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   const handleCopyLink = (id: number) => {
     const base64Id = btoa(String(id));
@@ -67,10 +70,22 @@ export const EmpresasPage: React.FC<EmpresasPageProps> = ({
     ? empresas.filter(e => !e.active)
     : empresas.filter(e => e.active);
 
+  // Reset page when toggle active changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [showInactive, empresas]);
+
+  const totalPages = Math.ceil(visibleEmpresas.length / itemsPerPage);
+  const paginatedEmpresas = visibleEmpresas.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
     <>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6 py-2 pb-6">
-        {visibleEmpresas.map(emp => (
+      <div className="flex flex-col rounded-2xl border border-border-low-contrast bg-white shadow-sm overflow-hidden">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6 p-6 max-h-[calc(100vh-230px)] overflow-y-auto">
+          {paginatedEmpresas.map(emp => (
           <div
             key={emp.id}
             className="flex flex-col justify-between rounded-2xl border border-border-low-contrast bg-white bg-gradient-to-br from-white via-white to-surface-subtle p-6 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-primary/40 relative overflow-hidden opacity-100"
@@ -151,6 +166,14 @@ export const EmpresasPage: React.FC<EmpresasPageProps> = ({
             </div>
           </div>
         ))}
+        </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          totalItems={visibleEmpresas.length}
+          itemsPerPage={itemsPerPage}
+        />
       </div>
 
       {isFormOpen && (

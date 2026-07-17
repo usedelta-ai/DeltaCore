@@ -181,6 +181,7 @@ export const api = {
     return request<Lead[]>(`/api/leads?${params.toString()}`);
   },
   getLeadById: (id: number) => request<Lead>(`/api/leads/${id}`),
+  getLeadAvatar: (leadId: number) => request<{ url: string | null }>(`/api/leads/${leadId}/avatar`),
   createLead: (data: Partial<Lead>) => request<Lead>('/api/leads', {
     method: 'POST',
     body: JSON.stringify(data),

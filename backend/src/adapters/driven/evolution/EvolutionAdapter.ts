@@ -116,4 +116,11 @@ export class EvolutionAdapter implements EvolutionAPIPort {
       })
     });
   }
+
+  async fetchProfilePictureUrl(instanceName: string, number: string): Promise<any> {
+    return evolutionRequest(`/chat/fetchProfilePictureUrl/${instanceName}`, {
+      method: 'POST',
+      body: JSON.stringify({ number })
+    });
+  }
 }

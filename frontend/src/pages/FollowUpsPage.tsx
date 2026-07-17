@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Building2, Users } from 'lucide-react';
 import type { Agent, FollowUpSetting } from '../services/api';
 import { ConfirmationModal } from '../components/Modal';
@@ -8,6 +8,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { FormInput } from '../components/ui/FormInput';
 import { Modal } from '../components/ui/Modal';
+import { Pagination } from '../components/ui/Pagination';
 
 interface FollowUpsPageProps {
   getGroupedFollowUps: () => any[];
@@ -60,10 +61,27 @@ export const FollowUpsPage: React.FC<FollowUpsPageProps> = ({
   handleDelete,
   setDeleteModal,
 }) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 3;
+
+  const groupedFollowUps = getGroupedFollowUps();
+
+  // Reset page when settings list changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [groupedFollowUps.length]);
+
+  const totalPages = Math.ceil(groupedFollowUps.length / itemsPerPage);
+  const paginatedFollowUps = groupedFollowUps.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
     <>
-      <div className="flex flex-col gap-6">
-        {getGroupedFollowUps().map(empGroup => (
+      <div className="flex flex-col rounded-2xl border border-border-low-contrast bg-white shadow-sm overflow-hidden">
+        <div className="flex flex-col gap-6 p-6 max-h-[calc(100vh-230px)] overflow-y-auto">
+          {paginatedFollowUps.map(empGroup => (
           <div key={empGroup.empresaId} className="bg-white border border-border-low-contrast rounded-xl p-6">
             <div className="border-b-2 border-border-low-contrast pb-2.5 mb-4 flex items-center gap-2.5">
               <Building2 size={18} className="text-primary" />
@@ -108,7 +126,15 @@ export const FollowUpsPage: React.FC<FollowUpsPageProps> = ({
               </div>
             ))}
           </div>
-        ))}
+          ))}
+        </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          totalItems={groupedFollowUps.length}
+          itemsPerPage={itemsPerPage}
+        />
       </div>
 
       {isFormOpen && (

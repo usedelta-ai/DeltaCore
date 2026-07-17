@@ -43,7 +43,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
   return (
     <div
-      className={`kanban-column flex flex-col flex-1 bg-surface-container-low/50 rounded-xl p-3 border ${isDragOver ? 'border-primary' : 'border-transparent'}`}
+      className={`kanban-column flex flex-col flex-1 basis-0 min-w-0 bg-surface-container-low/50 rounded-xl p-3 border ${isDragOver ? 'border-primary' : 'border-transparent'}`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -62,7 +62,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
           </div>
         )}
       </div>
-      <div className="space-y-stack-md overflow-y-auto max-h-[calc(100vh-320px)] pr-2">
+      <div className="space-y-stack-md overflow-y-auto max-h-[calc(100vh-260px)] pr-2 custom-scrollbar">
         {leads.map(lead => (
           <LeadCard
             key={lead.id}

@@ -4,6 +4,7 @@ import type { TimelineDot } from './TimelineDots';
 import { api } from '../../services/api';
 import type { Lead, Agent, LeadStatus } from '../../services/api';
 import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Select } from '../ui/Select';
 
 interface LeadCoreInfoPanelProps {
   lead: Lead;
@@ -360,36 +361,32 @@ export const LeadCoreInfoPanel: React.FC<LeadCoreInfoPanelProps> = ({
           {/* Status */}
           <div className="group">
             <label className="block text-label-md font-label-md text-on-surface-variant mb-1 ml-1">Status</label>
-            <select
-              className="w-full bg-surface-container-lowest border border-border-low-contrast rounded-xl px-4 py-2 text-body-md focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none cursor-pointer disabled:opacity-70"
+            <Select
+              options={[
+                { value: 'NOVO', label: 'Novo Lead' },
+                { value: 'HUMANO', label: 'Em Atendimento' },
+                { value: 'FINALIZADO', label: 'Finalizado' },
+                { value: 'CONCLUIDO', label: 'Faturado' },
+                { value: 'CANCELADO', label: 'Cancelado' }
+              ]}
               value={status}
               onChange={e => handleSelectChange('status', e.target.value)}
               disabled={!hasWritePermission}
-            >
-              <option value="NOVO">Novo Lead</option>
-              <option value="HUMANO">Em Atendimento</option>
-              <option value="FINALIZADO">Finalizado</option>
-              <option value="CONCLUIDO">Faturado</option>
-              <option value="CANCELADO">Cancelado</option>
-            </select>
+            />
           </div>
 
           {/* Agente Responsável */}
           <div className="group">
             <label className="block text-label-md font-label-md text-on-surface-variant mb-1 ml-1">Agente Responsável</label>
-            <select
-              className="w-full bg-surface-container-lowest border border-border-low-contrast rounded-xl px-4 py-2 text-body-md focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none cursor-pointer disabled:opacity-70"
+            <Select
+              options={[
+                { value: 0, label: 'Não atribuído (Sem agente)' },
+                ...agents.map(ag => ({ value: ag.id, label: ag.name }))
+              ]}
               value={agentId}
               onChange={e => handleSelectChange('agent_id', e.target.value)}
               disabled={!hasWritePermission}
-            >
-              <option value={0}>Não atribuído (Sem agente)</option>
-              {agents.map(ag => (
-                <option key={ag.id} value={ag.id}>
-                  {ag.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           {/* Origem */}
@@ -459,20 +456,20 @@ export const LeadCoreInfoPanel: React.FC<LeadCoreInfoPanelProps> = ({
                       className="w-full bg-surface-container-lowest border border-border-low-contrast rounded-lg p-2 text-body-sm text-on-surface-variant focus:ring-1 focus:ring-primary focus:border-transparent outline-none resize-y transition-all disabled:opacity-70"
                     />
                   ) : isBoolean ? (
-                    <select
-                      value={item.value}
+                    <Select
+                      options={[
+                        { value: 'true', label: 'Sim' },
+                        { value: 'false', label: 'Não' }
+                      ]}
+                      value={String(item.value)}
                       onChange={e => {
-                        handleCustomPropChange(item.id, e.target.value);
+                        handleCustomPropChange(item.id, String(e.target.value));
                         // Save select value immediately on change
-                        const updated = customProps.map(p => p.id === item.id ? { ...p, value: e.target.value } : p);
+                        const updated = customProps.map(p => p.id === item.id ? { ...p, value: String(e.target.value) } : p);
                         saveCustomProps(updated);
                       }}
                       disabled={!hasWritePermission}
-                      className="w-full bg-surface-container-lowest border border-border-low-contrast rounded-lg p-2 text-body-sm text-on-surface cursor-pointer focus:ring-1 focus:ring-primary outline-none transition-all disabled:opacity-70"
-                    >
-                      <option value="true">Sim</option>
-                      <option value="false">Não</option>
-                    </select>
+                    />
                   ) : parsedDate.type === 'date' || parsedDate.type === 'datetime-local' ? (
                     <input
                       type={parsedDate.type}

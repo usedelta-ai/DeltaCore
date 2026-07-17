@@ -35,7 +35,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onPessoaClick,
 }) => {
   return (
-    <div className="flex gap-3.5 h-full min-h-[716px] pb-8 items-start">
+    <div className="flex gap-3.5 w-full min-w-[900px] pb-8 items-start">
       {columns.map(col => (
         <KanbanColumn
           key={col.id}

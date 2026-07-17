@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { api } from '../services/api';
 import type { Lead, ChatMessage } from '../services/api';
 
@@ -26,141 +27,120 @@ function mergeMessages(a: ChatMessage[], b: ChatMessage[]): ChatMessage[] {
   );
 }
 
+function buildTimelineEvents(merged: ChatMessage[], lead: Lead): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+
+  const dbSystemEvents = merged.filter(
+    (m: any) => m.type === 'system_event' || m.role === 'system_event'
+  );
+
+  dbSystemEvents.forEach((sev: any) => {
+    let icon = 'info';
+    let type: 'ai' | 'human' | 'system' = 'system';
+
+    if (sev.event === 'human_takeover') {
+      icon = 'person';
+      type = 'human';
+    } else if (sev.event === 'lead_finalized') {
+      icon = 'check_circle';
+      type = 'system';
+    } else if (sev.event === 'lead_created') {
+      icon = 'person_add';
+      type = 'ai';
+    } else if (sev.event === 'field_change') {
+      icon = 'edit_note';
+      type = 'system';
+    }
+
+    events.push({
+      id: String(sev.id),
+      type,
+      timestamp: sev.createdAt || sev.timestamp,
+      label:
+        sev.event === 'lead_created'
+          ? 'Lead Criado'
+          : sev.event === 'human_takeover'
+          ? 'Atendimento Humano'
+          : sev.event === 'lead_finalized'
+          ? 'Finalização'
+          : 'Alteração de Campo',
+      icon,
+      description: sev.content,
+    });
+  });
+
+  const hasCreationEvent = events.some((e) => e.label === 'Lead Criado');
+  if (!hasCreationEvent && lead.created_at) {
+    events.push({
+      id: `created-${lead.id}`,
+      type: 'ai',
+      timestamp: lead.created_at,
+      label: 'Lead Criado',
+      icon: 'person_add',
+      description: `O lead foi adicionado ao sistema.`,
+    });
+  }
+
+  return events.sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+}
+
 export function useLeadDetail(leadId?: number) {
-  const [lead, setLead] = useState<Lead | null>(null);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchLead = useCallback(async (showLoading = false) => {
-    if (!leadId) return;
-    if (showLoading) setLoading(true);
-    setError(null);
-    try {
-      // 1. Fetch core lead details first so UI panels render immediately
-      const leadRes = await api.getLeadById(leadId);
-      setLead(leadRes);
-      if (showLoading) setLoading(false); // Stop loading indicator early as layout is now visible
+  // Query 1: Core lead details — fast fetch, no polling
+  const {
+    data: lead = null,
+    isLoading: loadingLead,
+    error: leadError,
+  } = useQuery<Lead | null>({
+    queryKey: ['lead', leadId],
+    queryFn: () => (leadId ? api.getLeadById(leadId) : Promise.resolve(null)),
+    enabled: !!leadId,
+    staleTime: 1000 * 15,
+  });
 
-      // 2. Fetch heavier chat history and timeline logs in parallel asynchronously
-      Promise.all([
+  // Query 2: Chat history — polls every 3s for active leads, stops when finalized
+  const isActive =
+    lead !== null &&
+    lead.status !== 'FINALIZADO' &&
+    lead.status !== 'CONCLUIDO' &&
+    lead.status !== 'CANCELADO';
+
+  const {
+    data: historyData,
+    isLoading: loadingHistory,
+  } = useQuery({
+    queryKey: ['leadHistory', leadId],
+    queryFn: async () => {
+      if (!leadId) return { chatHistory: [], timelineEvents: [] };
+      const [historyRes, agentHistoryRes] = await Promise.all([
         api.getLeadHistory(leadId),
-        api.getLeadAgentHistory(leadId)
-      ]).then(([historyRes, agentHistoryRes]) => {
-        // Merge both message sources, deduplicated by id
-        const merged = mergeMessages(
-          historyRes.messages || [],
-          agentHistoryRes.messages || []
-        );
-        setChatHistory(merged);
+        api.getLeadAgentHistory(leadId),
+      ]);
+      const merged = mergeMessages(
+        historyRes.messages || [],
+        agentHistoryRes.messages || []
+      );
+      return { chatHistory: merged };
+    },
+    enabled: !!leadId,
+    // Poll every 3s for active leads; stop polling for finalized leads
+    refetchInterval: isActive ? 3000 : false,
+    staleTime: 0,
+  });
 
-        // Build timeline events (excluding chat messages to show only system changes/transitions/takeovers)
-        const events: TimelineEvent[] = [];
+  const chatHistory = historyData?.chatHistory ?? [];
+  const timelineEvents = lead ? buildTimelineEvents(chatHistory, lead) : [];
 
-        // Extract system events (takeovers, finalizations and field changes) from agentHistoryRes combined messages
-        const dbSystemEvents = merged.filter((m: any) => m.type === 'system_event' || m.role === 'system_event');
-        
-        dbSystemEvents.forEach((sev: any) => {
-          let icon = 'info';
-          let type: 'ai' | 'human' | 'system' = 'system';
-          
-          if (sev.event === 'human_takeover') {
-            icon = 'person';
-            type = 'human';
-          } else if (sev.event === 'lead_finalized') {
-            icon = 'check_circle';
-            type = 'system';
-          } else if (sev.event === 'lead_created') {
-            icon = 'person_add';
-            type = 'ai';
-          } else if (sev.event === 'field_change') {
-            icon = 'edit_note';
-            type = 'system';
-          }
-
-          events.push({
-            id: String(sev.id),
-            type,
-            timestamp: sev.createdAt || sev.timestamp,
-            label: sev.event === 'lead_created' ? 'Lead Criado' :
-                   sev.event === 'human_takeover' ? 'Atendimento Humano' :
-                   sev.event === 'lead_finalized' ? 'Finalização' : 'Alteração de Campo',
-            icon,
-            description: sev.content,
-          });
-        });
-
-        // If no creation event was registered or returned, add fallback from lead info
-        const hasCreationEvent = events.some(e => e.label === 'Lead Criado');
-        if (!hasCreationEvent && leadRes.created_at) {
-          events.push({
-            id: `created-${leadRes.id}`,
-            type: 'ai',
-            timestamp: leadRes.created_at,
-            label: 'Lead Criado',
-            icon: 'person_add',
-            description: `O lead foi adicionado ao sistema.`,
-          });
-        }
-
-        setTimelineEvents(events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()));
-      }).catch(err => {
-        console.error("Erro ao buscar histórico/chat do lead:", err);
-      });
-
-    } catch (err: any) {
-      setError(err.message || 'Erro ao carregar detalhes do lead');
-      setLoading(false);
-    }
-  }, [leadId]);
-
-  useEffect(() => {
-    fetchLead(true);
-  }, [leadId, fetchLead]);
-
-  // Polling for new messages (when lead is not finalized)
-  useEffect(() => {
-    if (!leadId || !lead || lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO') {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-      return;
-    }
-
-    pollingRef.current = setInterval(async () => {
-      try {
-        const [historyRes, agentHistoryRes] = await Promise.all([
-          api.getLeadHistory(leadId),
-          api.getLeadAgentHistory(leadId),
-        ]);
-        const merged = mergeMessages(
-          historyRes.messages || [],
-          agentHistoryRes.messages || []
-        );
-        setChatHistory(prev => {
-          if (prev.length !== merged.length) return merged;
-          const a = prev[prev.length - 1];
-          const b = merged[merged.length - 1];
-          if (!a || !b || a.id !== b.id || a.content !== b.content) return merged;
-          return prev;
-        });
-      } catch (_) {}
-    }, 3000);
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-  }, [leadId, lead?.status]);
+  const loading = loadingLead || (loadingHistory && chatHistory.length === 0);
+  const error = leadError ? (leadError as Error).message : null;
 
   const refetch = useCallback(() => {
-    fetchLead(false);
-  }, [fetchLead]);
+    queryClient.invalidateQueries({ queryKey: ['lead', leadId] });
+    queryClient.invalidateQueries({ queryKey: ['leadHistory', leadId] });
+  }, [queryClient, leadId]);
 
   return { lead, chatHistory, timelineEvents, loading, error, refetch };
 }

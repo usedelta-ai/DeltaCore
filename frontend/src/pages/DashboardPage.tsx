@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { FilterBar } from '../components/features/FilterBar';
 import { KanbanBoard } from '../components/features/KanbanBoard';
+import { LeadListView } from '../components/features/LeadListView';
 import type { LeadCardData } from '../components/features/LeadCard';
 import type { Lead, Agent, Empresa } from '../services/api';
 import { mapLeadToCardData, getStatusForColumn } from '../utils/leadMapper';
@@ -171,15 +172,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     onLeadClick?.(id);
   };
 
-  // SVG ring progress: circumference of r=10 circle = 2π*10 ≈ 62.83
-  const radius = 10;
-  const circumference = 2 * Math.PI * radius;
-  const progress = countdown / REFRESH_INTERVAL;
-  const dashOffset = circumference * (1 - progress);
 
   return (
-    <div className="min-h-[calc(100vh-64px)] overflow-x-auto">
-      <div className="flex items-center justify-between">
+    <div className="min-h-[calc(100vh-64px)] pb-8">
+      <div className="flex items-center">
         <FilterBar
           viewMode={viewMode}
           onViewModeChange={setViewMode}
@@ -193,63 +189,33 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           onStatusChange={setSelectedStatus}
           companyOptions={companyOptions}
           agentOptions={agentOptions}
+          countdown={countdown}
+          isRefreshing={isRefreshing}
+          onRefresh={triggerRefresh}
         />
-
-        {/* Refresh countdown button */}
-        <button
-          onClick={triggerRefresh}
-          title="Clique para atualizar agora"
-          className="flex items-center gap-2 mr-4 px-3 py-1.5 rounded-lg bg-surface-container border border-border-low-contrast text-on-surface-variant hover:text-primary hover:border-primary transition-all text-label-md group"
-        >
-          <span
-            className={`material-symbols-outlined text-[16px] transition-transform duration-500 ${isRefreshing ? 'rotate-180' : 'group-hover:rotate-90'}`}
-            style={{ fontVariationSettings: "'FILL' 0" }}
-          >
-            refresh
-          </span>
-          <span className="text-[12px] font-medium tabular-nums w-3">{countdown}s</span>
-          {/* Ring progress */}
-          <svg width="22" height="22" className="-rotate-90">
-            <circle
-              cx="11" cy="11" r={radius}
-              fill="none"
-              stroke="currentColor"
-              strokeOpacity="0.15"
-              strokeWidth="2"
-            />
-            <circle
-              cx="11" cy="11" r={radius}
-              fill="none"
-              stroke="currentColor"
-              strokeOpacity="0.7"
-              strokeWidth="2"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-              strokeLinecap="round"
-              style={{ transition: 'stroke-dashoffset 0.9s linear' }}
-            />
-          </svg>
-        </button>
       </div>
 
-      {viewMode === 'kanban' ? (
-        <KanbanBoard
-          columns={columns}
-          onCardClick={handleCardClick}
-          onPessoaClick={onPessoaClick}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          dragOverColumn={dragOverColumn}
-          draggedLeadId={draggedLeadId}
-        />
-      ) : (
-        <div className="text-center py-20 text-on-surface-variant">
-          <span className="material-symbols-outlined text-5xl mb-4 block">list</span>
-          <p>Visualização em lista em breve</p>
-        </div>
-      )}
+      <div className="overflow-x-auto">
+        {viewMode === 'kanban' ? (
+          <KanbanBoard
+            columns={columns}
+            onCardClick={handleCardClick}
+            onPessoaClick={onPessoaClick}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            dragOverColumn={dragOverColumn}
+            draggedLeadId={draggedLeadId}
+          />
+        ) : (
+          <LeadListView
+            leads={cardData}
+            onLeadClick={handleCardClick}
+            onPessoaClick={onPessoaClick}
+          />
+        )}
+      </div>
     </div>
   );
 };

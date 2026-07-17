@@ -1,4 +1,5 @@
 import React from 'react';
+import { Select } from '../ui/Select';
 
 interface FilterOption {
   value: string;
@@ -18,6 +19,9 @@ interface FilterBarProps {
   onStatusChange?: (val: string) => void;
   viewMode?: 'kanban' | 'list';
   onViewModeChange?: (mode: 'kanban' | 'list') => void;
+  countdown?: number;
+  isRefreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 interface FilterSelectProps {
@@ -36,21 +40,13 @@ const FilterSelect: React.FC<FilterSelectProps> = ({ icon, value, onChange, opti
     >
       {icon}
     </span>
-    <select
+    <Select
+      options={options}
       value={value}
-      onChange={e => onChange(e.target.value)}
-      className="w-full bg-surface-container-lowest border border-border-low-contrast rounded-xl pl-9 pr-8 py-[9px] text-body-sm text-on-surface outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/10 focus:border-primary appearance-none cursor-pointer hover:border-primary/40"
-    >
-      {options.map(opt => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
-    <span
-      className="material-symbols-outlined absolute right-2.5 pointer-events-none text-on-surface-variant text-[18px]"
-      style={{ fontVariationSettings: "'FILL' 0" }}
-    >
-      keyboard_arrow_down
-    </span>
+      onChange={e => onChange(String(e.target.value))}
+      className="pl-9 py-[8.5px]"
+      containerClassName="w-full"
+    />
   </div>
 );
 
@@ -67,6 +63,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onStatusChange,
   viewMode = 'kanban',
   onViewModeChange,
+  countdown,
+  isRefreshing,
+  onRefresh,
 }) => {
   const statusOptions = [
     { value: '', label: 'Todas as Situações' },
@@ -127,40 +126,79 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         />
       </div>
 
-      {/* Right: view toggle */}
+      {/* Right: view toggle and refresh button */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <div className="flex bg-surface-container-low p-1 rounded-xl border border-border-low-contrast">
+        {onRefresh && countdown !== undefined && (
           <button
-            title="Kanban"
-            className={`p-1.5 px-3 rounded-lg transition-all duration-200 ${
+            onClick={onRefresh}
+            title="Clique para atualizar agora"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-container-lowest border border-border-low-contrast text-on-surface-variant hover:text-primary hover:border-primary transition-all text-body-sm group h-[38px] hover:shadow-sm"
+          >
+            <span
+              className={`material-symbols-outlined text-[16px] transition-transform duration-500 ${isRefreshing ? 'rotate-180' : 'group-hover:rotate-90'}`}
+              style={{ fontVariationSettings: "'FILL' 0" }}
+            >
+              refresh
+            </span>
+            <span className="text-[12px] font-medium tabular-nums w-4 text-left">{countdown}s</span>
+            {/* Ring progress */}
+            <svg width="18" height="18" className="-rotate-90 shrink-0">
+              <circle
+                cx="9" cy="9" r="7"
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity="0.15"
+                strokeWidth="1.5"
+              />
+              <circle
+                cx="9" cy="9" r="7"
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity="0.7"
+                strokeWidth="1.5"
+                strokeDasharray={2 * Math.PI * 7}
+                strokeDashoffset={2 * Math.PI * 7 * (1 - countdown / 4)}
+                strokeLinecap="round"
+                style={{ transition: 'stroke-dashoffset 0.9s linear' }}
+              />
+            </svg>
+          </button>
+        )}
+
+        <div className="flex bg-surface-container-low/85 p-1 rounded-xl border border-border-low-contrast/50 h-[38px] items-center shadow-inner">
+          <button
+            title="Visualização em Kanban"
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all duration-300 group cursor-pointer ${
               viewMode === 'kanban'
-                ? 'bg-white shadow-sm text-primary'
-                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                ? 'bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] text-primary font-bold scale-[1.02]'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50'
             }`}
             onClick={() => onViewModeChange?.('kanban')}
           >
             <span
-              className="material-symbols-outlined text-[20px]"
+              className="material-symbols-outlined text-[18px] transition-transform duration-300 group-hover:scale-105"
               style={{ fontVariationSettings: viewMode === 'kanban' ? "'FILL' 1" : "'FILL' 0" }}
             >
               view_kanban
             </span>
+            <span className="text-[12px] uppercase tracking-wider font-bold">Kanban</span>
           </button>
           <button
-            title="Lista"
-            className={`p-1.5 px-3 rounded-lg transition-all duration-200 ${
+            title="Visualização em Lista"
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all duration-300 group cursor-pointer ${
               viewMode === 'list'
-                ? 'bg-white shadow-sm text-primary'
-                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                ? 'bg-white shadow-[0_2px_8px_rgba(0,0,0,0.06)] text-primary font-bold scale-[1.02]'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50'
             }`}
             onClick={() => onViewModeChange?.('list')}
           >
             <span
-              className="material-symbols-outlined text-[20px]"
+              className="material-symbols-outlined text-[18px] transition-transform duration-300 group-hover:scale-105"
               style={{ fontVariationSettings: viewMode === 'list' ? "'FILL' 1" : "'FILL' 0" }}
             >
               list
             </span>
+            <span className="text-[12px] uppercase tracking-wider font-bold">Lista</span>
           </button>
         </div>
       </div>
