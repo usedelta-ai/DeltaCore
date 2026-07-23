@@ -28,9 +28,11 @@ interface TeamChatPanelProps {
   onViewAllTimeline?: () => void;
   onUpdateLead?: (updateData: Partial<Lead>) => Promise<void>;
   hasWritePermission?: boolean;
+  isSuperAdmin?: boolean;
   onPessoaClick?: (pessoaId: number) => void;
   formatCurrency?: (val: number | null) => string;
   formatDate?: (dateStr: string | null | undefined) => string;
+  loadingMessages?: boolean;
 }
 
 function isMediaMessage(msg: ChatMessage): boolean {
@@ -62,12 +64,13 @@ function getSystemEventType(msg: ChatMessage): 'human_takeover' | 'finalized' | 
   const role = (msg.role || '').toLowerCase();
   if (role !== 'system_event') return null;
   if (content.includes('human_takeover') || content.includes('🔁') || content.includes('atendimento humano')) {
+    if (content.includes('iniciado pela plataforma')) return null;
     return 'human_takeover';
   }
   if (content.includes('finalized') || content.includes('✅') || content.includes('finalizad')) {
     return 'finalized';
   }
-  return 'human_takeover';
+  return null;
 }
 
 function getMessageSender(
@@ -118,34 +121,6 @@ const formatKey = (key: string, trans: Record<string, string> | null) => {
   return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
 
-// Date parser helper for inputs
-const parseDateForInput = (value: string): { type: 'date' | 'datetime-local' | 'text'; formattedValue: string } => {
-  if (!value) return { type: 'text', formattedValue: '' };
-  const date = new Date(value);
-  if (isNaN(date.getTime())) {
-    return { type: 'text', formattedValue: value };
-  }
-  const hasTime = value.includes(':') || value.includes('T');
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const yyyy = date.getFullYear();
-  const mm = pad(date.getMonth() + 1);
-  const dd = pad(date.getDate());
-
-  if (hasTime) {
-    const hh = pad(date.getHours());
-    const min = pad(date.getMinutes());
-    return {
-      type: 'datetime-local',
-      formattedValue: `${yyyy}-${mm}-${dd}T${hh}:${min}`,
-    };
-  } else {
-    return {
-      type: 'date',
-      formattedValue: `${yyyy}-${mm}-${dd}`,
-    };
-  }
-};
-
 export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
   messages = [],
   onSendMessage,
@@ -162,9 +137,11 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
   onViewAllTimeline,
   onUpdateLead,
   hasWritePermission = true,
+  isSuperAdmin = false,
   onPessoaClick,
   formatCurrency: _formatCurrency,
   formatDate,
+  loadingMessages = false,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatBodyRef = useRef<HTMLDivElement>(null);
@@ -192,8 +169,6 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
   // Expanded info panel state
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [showMotiveBanner, setShowMotiveBanner] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
-  console.log('Chat panel loading state:', isLoading);
 
   // Local modals for status transitions (CONCLUIDO and HUMANO)
   const [showLocalConcludedModal, setShowLocalConcludedModal] = useState(false);
@@ -211,14 +186,13 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [company, setCompany] = useState('');
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<LeadStatus>('NOVO');
   const [agentId, setAgentId] = useState<number>(0);
   const [source, setSource] = useState('');
   const [customProps, setCustomProps] = useState<{ id: string; key: string; value: string }[]>([]);
 
-  // Find agent translations
+  // Find agent translations and schema
   const agent = lead ? agents.find(a => a.id === lead.agent_id) : undefined;
   const translations = React.useMemo(() => {
     let trans: Record<string, string> = {};
@@ -229,6 +203,23 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
     }
     return trans;
   }, [agent, agents]);
+
+  const schemaFields = React.useMemo(() => {
+    if (!agent?.custom_properties_schema) return [];
+    try {
+      const s = typeof agent.custom_properties_schema === 'string'
+        ? JSON.parse(agent.custom_properties_schema)
+        : agent.custom_properties_schema;
+      if (s && Array.isArray(s.fields)) return s.fields as Array<{ key: string; label: string; type: string; required: boolean; placeholder?: string; options?: { value: string; label: string }[] }>;
+    } catch (_) {}
+    return [];
+  }, [agent]);
+
+  const schemaMap = React.useMemo(() => {
+    const map = new Map<string, typeof schemaFields[number]>();
+    schemaFields.forEach(f => map.set(f.key, f));
+    return map;
+  }, [schemaFields]);
 
   // Sync state with incoming lead changes
   useEffect(() => {
@@ -241,30 +232,36 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
 
     const cProps = lead.custom_properties || {};
     setEmail(cProps.email || '');
-    setCompany(cProps.company_name || cProps.empresa || '');
     setSource(cProps.source || '');
 
-    // Initialize custom properties excluding standard email/company/source fields
-    const customList = Object.entries(cProps)
-      .filter(([k]) => k !== 'email' && k !== 'company_name' && k !== 'empresa' && k !== 'source')
-      .map(([k, v]) => ({
+    // Initialize custom properties: merge schema fields with existing values
+    const existingKeys = new Set<string>();
+    const customList: { id: string; key: string; value: string }[] = [];
+
+    for (const [k, v] of Object.entries(cProps)) {
+      if (k === 'email' || k === 'source') continue;
+      existingKeys.add(k);
+      customList.push({
         id: Math.random().toString(36).substr(2, 9),
         key: k,
         value: typeof v === 'object' ? JSON.stringify(v) : String(v),
-      }));
+      });
+    }
+
+    for (const field of schemaFields) {
+      if (existingKeys.has(field.key)) continue;
+      customList.push({
+        id: Math.random().toString(36).substr(2, 9),
+        key: field.key,
+        value: field.type === 'boolean' ? 'false' : '',
+      });
+    }
+
     setCustomProps(customList);
     setShowMotiveBanner(true);
-  }, [lead]);
+  }, [lead, schemaFields]);
 
-  // Trigger loading spinner when lead ID changes to prevent flickering
-  useEffect(() => {
-    if (!lead) return;
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [lead?.id]);
+
 
 
   const triggerSave = async (payload: Partial<Lead>) => {
@@ -296,7 +293,6 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
       // It's a key inside custom_properties
       const updatedProps = { ...(lead.custom_properties || {}) };
       if (field === 'email') updatedProps.email = currentVal || null;
-      else if (field === 'company') updatedProps.company_name = currentVal || null;
       else if (field === 'source') updatedProps.source = currentVal || null;
 
       triggerSave({ custom_properties: updatedProps });
@@ -349,6 +345,7 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
       }
     } else if (field === 'agent_id') {
       const newAgentId = Number(val);
+      if (newAgentId === lead.agent_id) return;
       setAgentId(newAgentId);
       triggerSave({ agent_id: newAgentId });
     }
@@ -364,7 +361,6 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
     if (!lead) return;
     const updatedProps: Record<string, any> = {
       email: email || null,
-      company_name: company || null,
       source: source || null,
     };
     targetPropsList.forEach(item => {
@@ -394,16 +390,22 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
     }
   };
 
+  // Scroll to bottom when messages load or change
   useEffect(() => {
-    if (isLoading) {
-      // Quando estiver carregando pela primeira vez, joga o scroll para baixo imediatamente sem animação
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-      }, 50);
-    } else {
+    if (loadingMessages) return;
+    
+    // When history loaded, force the scroll to the bottom instantly
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [loadingMessages]);
+
+  useEffect(() => {
+    if (!loadingMessages) {
       scrollToBottom();
     }
-  }, [messages, isLoading]);
+  }, [messages, loadingMessages]);
 
   useEffect(() => {
     const handleMediaLoaded = () => {
@@ -629,7 +631,7 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
     return null;
   };
 
-  if (isLoading || !lead) {
+  if (loadingMessages || !lead) {
     return (
       <div className="flex-1 bg-surface-container-lowest flex flex-col items-center justify-center h-full">
         <div className="w-10 h-10 rounded-full border-[3px] border-primary/20 border-t-primary animate-spin mb-3"></div>
@@ -796,22 +798,8 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       onBlur={() => handleTextBlur('email', email, lead?.custom_properties?.email || '')}
-                      disabled={!hasWritePermission}
+                      disabled={!hasWritePermission || !isSuperAdmin}
                       placeholder="Não informado"
-                      className="w-full bg-transparent border-none p-0 text-body-md font-medium mt-1 focus:ring-0 focus:outline-none disabled:opacity-75 text-on-surface"
-                    />
-                  </div>
-
-                  {/* Empresa */}
-                  <div className="bg-surface-container-low border border-border-low-contrast rounded-lg p-3">
-                    <span className="text-label-md text-on-surface-variant uppercase">Empresa</span>
-                    <input
-                      type="text"
-                      value={company}
-                      onChange={e => setCompany(e.target.value)}
-                      onBlur={() => handleTextBlur('company', company, lead?.custom_properties?.company_name || lead?.custom_properties?.empresa || '')}
-                      disabled={!hasWritePermission}
-                      placeholder="Não informada"
                       className="w-full bg-transparent border-none p-0 text-body-md font-medium mt-1 focus:ring-0 focus:outline-none disabled:opacity-75 text-on-surface"
                     />
                   </div>
@@ -863,7 +851,7 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
                       ]}
                       value={agentId}
                       onChange={e => handleSelectChange('agent_id', e.target.value)}
-                      disabled={!hasWritePermission}
+                      disabled={!hasWritePermission || !isSuperAdmin}
                       variant="minimal"
                     />
                   </div>
@@ -876,27 +864,12 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
                       value={source}
                       onChange={e => setSource(e.target.value)}
                       onBlur={() => handleTextBlur('source', source, lead?.custom_properties?.source || '')}
-                      disabled={!hasWritePermission}
+                      disabled={!hasWritePermission || !isSuperAdmin}
                       placeholder="Não informada"
                       className="w-full bg-transparent border-none p-0 text-body-md font-medium mt-1 focus:ring-0 focus:outline-none disabled:opacity-75 text-on-surface"
                     />
                   </div>
 
-                  {/* CPF */}
-                  <div className="bg-surface-container-low border border-border-low-contrast rounded-lg p-3">
-                    <span className="text-label-md text-on-surface-variant uppercase">CPF</span>
-                    <input
-                      type="text"
-                      value={lead?.custom_properties?.cpf || ''}
-                      onChange={e => {
-                        const updatedProps = { ...(lead?.custom_properties || {}), cpf: e.target.value };
-                        if (onUpdateLead) onUpdateLead({ custom_properties: updatedProps });
-                      }}
-                      disabled={!hasWritePermission}
-                      placeholder="Não informado"
-                      className="w-full bg-transparent border-none p-0 text-body-md font-medium mt-1 focus:ring-0 focus:outline-none disabled:opacity-75 text-on-surface"
-                    />
-                  </div>
                 </div>
               </div>
 
@@ -960,18 +933,14 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {customProps.map(item => {
                       const label = formatKey(item.key, translations);
-                      const keyLower = item.key.toLowerCase();
-                      const isLongText = keyLower.includes('summary') || keyLower.includes('resumo') || keyLower.includes('notes') || keyLower.includes('observ') || item.value.length > 55;
-                      const isBoolean = item.value === 'true' || item.value === 'false' || typeof item.value === 'boolean';
-                      const isDateField = keyLower.includes('date') || keyLower.includes('check_in') || keyLower.includes('check_out') || keyLower.includes('_at') || keyLower.includes('data');
-                      const parsedDate = isDateField ? parseDateForInput(item.value) : { type: 'text' as const, formattedValue: item.value };
+                      const schemaField = schemaMap.get(item.key);
 
                       return (
                         <div key={item.id} className="bg-surface-container-low border border-border-low-contrast rounded-lg p-2.5">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-primary block mb-1">
                             {label}
                           </span>
-                          {isLongText ? (
+                          {schemaField?.type === 'textarea' ? (
                             <textarea
                               value={item.value}
                               onChange={e => handleCustomPropChange(item.id, e.target.value)}
@@ -980,7 +949,7 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
                               rows={2}
                               className="w-full bg-transparent border-none p-0 text-body-sm text-on-surface-variant focus:ring-0 outline-none resize-y disabled:opacity-75"
                             />
-                          ) : isBoolean ? (
+                          ) : schemaField?.type === 'boolean' ? (
                             <Select
                               options={[
                                 { value: 'true', label: 'Sim' },
@@ -995,15 +964,36 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
                               disabled={!hasWritePermission}
                               variant="minimal"
                             />
-                          ) : parsedDate.type === 'date' || parsedDate.type === 'datetime-local' ? (
+                          ) : schemaField?.type === 'select' ? (
+                            <Select
+                              options={schemaField.options || []}
+                              value={item.value}
+                              onChange={e => {
+                                handleCustomPropChange(item.id, String(e.target.value));
+                                const updated = customProps.map(p => p.id === item.id ? { ...p, value: String(e.target.value) } : p);
+                                saveCustomProps(updated);
+                              }}
+                              disabled={!hasWritePermission}
+                              variant="minimal"
+                            />
+                          ) : schemaField?.type === 'date' ? (
                             <input
-                              type={parsedDate.type}
-                              value={parsedDate.formattedValue}
+                              type="date"
+                              value={item.value}
                               onChange={e => {
                                 handleCustomPropChange(item.id, e.target.value);
                                 const updated = customProps.map(p => p.id === item.id ? { ...p, value: e.target.value } : p);
                                 saveCustomProps(updated);
                               }}
+                              disabled={!hasWritePermission}
+                              className="w-full bg-transparent border-none p-0 text-body-sm text-on-surface focus:ring-0 outline-none disabled:opacity-75"
+                            />
+                          ) : schemaField?.type === 'number' ? (
+                            <input
+                              type="number"
+                              value={item.value}
+                              onChange={e => handleCustomPropChange(item.id, e.target.value)}
+                              onBlur={() => saveCustomProps()}
                               disabled={!hasWritePermission}
                               className="w-full bg-transparent border-none p-0 text-body-sm text-on-surface focus:ring-0 outline-none disabled:opacity-75"
                             />
@@ -1081,13 +1071,9 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
               <span className="text-label-md font-headline font-bold uppercase tracking-wider">{lead?.name || 'Sem Nome'}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-primary">id_card</span>
+              <span className="material-symbols-outlined text-[18px] text-primary">phone</span>
               <span className="text-label-md">
-                {lead?.custom_properties?.cpf ? (
-                  String(lead.custom_properties.cpf).replace(/\D/g, '').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
-                ) : (
-                  lead?.remote_jid_alt?.replace('@s.whatsapp.net', '') || 'Sem telefone'
-                )}
+                {lead?.remote_jid_alt?.replace('@s.whatsapp.net', '') || 'Sem telefone'}
               </span>
             </div>
             {lead?.taken_motive && !showMotiveBanner && (

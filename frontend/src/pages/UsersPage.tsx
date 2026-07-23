@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { Empresa } from '../services/api';
-import { ShieldAlert, Eye, EyeOff } from 'lucide-react';
+import { api } from '../services/api';
+import { ShieldAlert, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { ConfirmationModal } from '../components/Modal';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -45,6 +46,17 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas, token }) => {
     id: 0,
     name: '',
   });
+
+  const [resetPasswordModal, setResetPasswordModal] = useState<{ isOpen: boolean; id: number; name: string }>({
+    isOpen: false,
+    id: 0,
+    name: '',
+  });
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetShowPassword, setResetShowPassword] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -175,6 +187,15 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas, token }) => {
                             <Button size="sm" variant="secondary" onClick={() => openEditForm(u)}>
                               Editar
                             </Button>
+                            <Button size="sm" variant="secondary" onClick={() => {
+                                setResetPasswordModal({ isOpen: true, id: u.id, name: u.name });
+                                setResetNewPassword('');
+                                setResetError(null);
+                                setResetSuccess(null);
+                              }}>
+                                <KeyRound size={14} className="mr-1" />
+                                Resetar Senha
+                              </Button>
                             <Button size="sm" variant="danger" onClick={() => confirmDelete(u.id, u.name)}>
                               Excluir
                             </Button>
@@ -314,6 +335,86 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas, token }) => {
               </Button>
               <Button type="submit" variant="primary" disabled={isActionLoading}>
                 {isActionLoading ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {resetPasswordModal.isOpen && (
+        <Modal
+          isOpen={resetPasswordModal.isOpen}
+          onClose={() => setResetPasswordModal({ isOpen: false, id: 0, name: '' })}
+          title={`Resetar Senha - ${resetPasswordModal.name}`}
+        >
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            setResetError(null);
+            setResetSuccess(null);
+
+            if (resetNewPassword.length < 6) {
+              setResetError('A senha deve ter pelo menos 6 caracteres');
+              return;
+            }
+
+            setResetLoading(true);
+            try {
+              await api.resetUserPassword(resetPasswordModal.id, resetNewPassword);
+              setResetSuccess('Senha resetada com sucesso! O usuário deverá trocar a senha no próximo login.');
+              setTimeout(() => {
+                setResetPasswordModal({ isOpen: false, id: 0, name: '' });
+              }, 2000);
+            } catch (err: any) {
+              setResetError(err.message || 'Erro ao resetar senha');
+            } finally {
+              setResetLoading(false);
+            }
+          }} className="flex flex-col gap-5 p-6">
+            <p className="text-body-sm text-on-surface-variant">
+              Isso irá gerar uma nova senha para <strong>{resetPasswordModal.name}</strong>.
+              O usuário será forçado a trocar a senha no próximo login e todas as sessões ativas serão encerradas.
+            </p>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-label-md font-label-md text-on-surface-variant">
+                Nova Senha
+              </label>
+              <div className="relative">
+                <input
+                  type={resetShowPassword ? 'text' : 'password'}
+                  className="w-full px-3.5 py-3 text-body-sm rounded-xl border border-border-low-contrast bg-white text-on-surface placeholder:text-on-surface-variant/50 outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/10 pr-12"
+                  placeholder="Mínimo 6 caracteres"
+                  value={resetNewPassword}
+                  onChange={e => setResetNewPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  disabled={resetLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setResetShowPassword(!resetShowPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant cursor-pointer border-none bg-none p-2 flex items-center"
+                  disabled={resetLoading}
+                >
+                  {resetShowPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {resetError && (
+              <p className="text-[12px] text-status-critical font-bold">{resetError}</p>
+            )}
+
+            {resetSuccess && (
+              <p className="text-[12px] text-status-success font-bold">{resetSuccess}</p>
+            )}
+
+            <div className="flex justify-end gap-2.5 border-t border-border-low-contrast pt-5 mt-1">
+              <Button type="button" variant="secondary" onClick={() => setResetPasswordModal({ isOpen: false, id: 0, name: '' })} disabled={resetLoading}>
+                Cancelar
+              </Button>
+              <Button type="submit" variant="primary" disabled={resetLoading}>
+                {resetLoading ? 'Resetando...' : 'Resetar Senha'}
               </Button>
             </div>
           </form>

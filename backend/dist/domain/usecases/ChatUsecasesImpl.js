@@ -110,28 +110,29 @@ class ChatUsecasesImpl {
         await this.checkCompanyAccessByAgent(user, lead.agent_id);
         if (!lead.session_id)
             throw new Error('Lead has no session_id');
-        // ── 1) Always load the standard WhatsApp messages ──────────────────────────
-        const standardMessages = await this.db.getLeadStandardMessages(lead.session_id);
-        // ── 2) Try to find the n8n dynamic table for this agent ────────────────────
-        const agent = await this.db.getAgentById(lead.agent_id);
-        if (!agent) {
-            return { source: 'standard_messages_table', messages: standardMessages };
-        }
-        const possibleTables = this.getAgentTableNames(agent.instance_name || agent.name);
+        // ── 1) Load standard messages, agent details, and history changes in parallel
+        const [standardMessages, agent, historyLogs] = await Promise.all([
+            this.db.getLeadStandardMessages(lead.session_id),
+            this.db.getAgentById(lead.agent_id),
+            this.db.getLeadHistoryChanges(leadId),
+        ]);
+        // ── 2) Try to find the n8n dynamic table for this agent
         let dynamicTableName = null;
-        for (const tableName of possibleTables) {
-            const exists = await this.db.checkTableExists(tableName);
-            if (exists) {
-                dynamicTableName = tableName;
-                break;
+        let dynRows = [];
+        if (agent) {
+            const possibleTables = this.getAgentTableNames(agent.instance_name || agent.name);
+            for (const tableName of possibleTables) {
+                const exists = await this.db.checkTableExists(tableName);
+                if (exists) {
+                    dynamicTableName = tableName;
+                    break;
+                }
+            }
+            if (dynamicTableName) {
+                dynRows = await this.db.getDynamicTableMessages(dynamicTableName, lead.session_id);
             }
         }
-        if (!dynamicTableName) {
-            return { source: 'standard_messages_table', messages: standardMessages };
-        }
-        // ── 3) Load n8n rows for this session ──────────────────────────────────────
-        const dynRows = await this.db.getDynamicTableMessages(dynamicTableName, lead.session_id);
-        // ── 4) Extract ONLY tool_call and tool_result events from n8n rows ─────────
+        // ── 3) Extract ONLY tool_call and tool_result events from n8n rows
         //   Each n8n row has a "message" field which is a JSON array of { role, content }
         //   We only care about:
         //     • role === 'assistant' with Array content → tool calls
@@ -253,7 +254,7 @@ class ChatUsecasesImpl {
                 });
             }
         }
-        // ── 5) Inject system events (creation date from lead + physical lead_history log changes) ─────────────────
+        // ── 4) Inject system events (creation date from lead + takeover/finalization + physical lead_history log changes)
         const systemEvents = [];
         if (lead.created_at) {
             systemEvents.push({
@@ -265,7 +266,34 @@ class ChatUsecasesImpl {
                 createdAt: new Date(lead.created_at),
             });
         }
-        // Query physical lead_history table logs
+        // New: Inject takeover & finalization events directly here
+        const isHuman = lead.status === 'HUMANO';
+        const isFinalized = lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO';
+        if ((isHuman || isFinalized) && lead.taken_over_at) {
+            systemEvents.push({
+                id: `system-human-${lead.id}`,
+                type: 'system_event',
+                event: 'human_takeover',
+                content: lead.taken_motive
+                    ? `🔁 Atendimento humano — ${lead.taken_motive}`
+                    : '🔁 Atendimento humano iniciado',
+                role: 'system_event',
+                createdAt: new Date(lead.taken_over_at),
+            });
+        }
+        if (isFinalized) {
+            systemEvents.push({
+                id: `system-finalized-${lead.id}`,
+                type: 'system_event',
+                event: 'lead_finalized',
+                content: lead.status === 'CONCLUIDO'
+                    ? '✅ Atendimento concluído'
+                    : '✅ Atendimento finalizado',
+                role: 'system_event',
+                createdAt: lead.updated_at ? new Date(lead.updated_at) : new Date(),
+            });
+        }
+        // Physical lead_history table logs
         try {
             let translations = {};
             if (agent && agent.translations) {
@@ -274,7 +302,6 @@ class ChatUsecasesImpl {
                 }
                 catch (_) { }
             }
-            const historyLogs = await this.db.getLeadHistoryChanges(leadId);
             for (const log of historyLogs) {
                 const who = log.changed_by_agent
                     ? `Agente ${log.agent_name || 'IA'}`
@@ -320,7 +347,7 @@ class ChatUsecasesImpl {
             }
         }
         catch (_) { }
-        // ── 6) Merge standard messages + tool events + system events, sort chronologically ──
+        // ── 5) Merge standard messages + tool events + system events, sort chronologically
         const combined = [
             ...standardMessages.map((m) => ({ ...m, type: 'message' })),
             ...toolEvents,

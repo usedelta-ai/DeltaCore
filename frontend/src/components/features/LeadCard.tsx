@@ -20,6 +20,7 @@ export interface LeadCardData {
 
 interface LeadCardProps {
   lead: LeadCardData;
+  avatarSrc?: string | null;
   onCardClick?: (id: number) => void;
   onDragStart?: (e: React.DragEvent, id: number) => void;
   onPessoaClick?: (pessoaId: number) => void;
@@ -66,10 +67,10 @@ const typeConfig = {
   },
 };
 
-export const LeadCard: React.FC<LeadCardProps> = ({ lead, onCardClick, onDragStart, onPessoaClick }) => {
+export const LeadCard: React.FC<LeadCardProps> = ({ lead, avatarSrc, onCardClick, onDragStart, onPessoaClick }) => {
   const type = typeConfig[lead.type];
   const badgeClass = badgeStyles[lead.badge.variant] || 'bg-surface-container-highest text-on-surface-variant';
-  const avatarBg = lead.avatarType === 'ai' ? 'bg-blue-500' : 'bg-secondary';
+
 
   return (
     <div
@@ -159,6 +160,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, onCardClick, onDragSta
             leadId={lead.id}
             avatarType={lead.avatarType}
             avatarLabel={lead.avatarLabel}
+            src={avatarSrc}
             className="w-6 h-6 text-[10px] border-2 border-surface shadow-sm"
           />
         </div>

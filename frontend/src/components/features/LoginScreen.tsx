@@ -3,7 +3,7 @@ import { api } from '../../services/api';
 import { KeyRound, Mail, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 interface LoginScreenProps {
-  onLoginSuccess: (token: string, user: { id: number; name: string; email: string; role: string; empresa_id?: number | null; empresa_name?: string | null; empresa_logo?: string | null }) => void;
+  onLoginSuccess: (token: string, user: { id: number; name: string; email: string; role: string; empresa_id?: number | null; empresa_name?: string | null; empresa_logo?: string | null; avatar?: string | null }, mustChangePassword: boolean) => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
@@ -78,7 +78,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     try {
       const res = await api.login({ email, password, empresaId: companyId || undefined });
       if (res && res.token && res.user) {
-        onLoginSuccess(res.token, res.user);
+        onLoginSuccess(res.token, res.user, res.must_change_password);
       } else {
         setError('Resposta inválida do servidor');
       }

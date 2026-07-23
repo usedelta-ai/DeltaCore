@@ -3,6 +3,10 @@ import { EvolutionAPIPort } from '../../../ports/driven/EvolutionAPIPort';
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || '';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
 
+const avatarCache = new Map<string, { url: string | null; expiresAt: number }>();
+const AVATAR_CACHE_TTL = 35 * 60 * 1000;
+const AVATAR_ERROR_TTL = 5 * 60 * 1000;
+
 async function evolutionRequest(path: string, options: any = {}) {
   if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
     throw new Error('Evolution API URL or API Key is not configured in .env');
@@ -117,10 +121,30 @@ export class EvolutionAdapter implements EvolutionAPIPort {
     });
   }
 
-  async fetchProfilePictureUrl(instanceName: string, number: string): Promise<any> {
-    return evolutionRequest(`/chat/fetchProfilePictureUrl/${instanceName}`, {
-      method: 'POST',
-      body: JSON.stringify({ number })
-    });
+  async fetchProfilePictureUrl(instanceName: string, number: string): Promise<{ profilePictureUrl: string | null }> {
+    const key = `${instanceName}:${number}`;
+    const cached = avatarCache.get(key);
+    if (cached && Date.now() < cached.expiresAt) {
+      return { profilePictureUrl: cached.url };
+    }
+
+    try {
+      const result = await evolutionRequest(`/chat/fetchProfilePictureUrl/${instanceName}`, {
+        method: 'POST',
+        body: JSON.stringify({ number })
+      });
+      const url = (result as any)?.profilePictureUrl || null;
+      avatarCache.set(key, {
+        url,
+        expiresAt: Date.now() + AVATAR_CACHE_TTL
+      });
+      return { profilePictureUrl: url };
+    } catch (err) {
+      avatarCache.set(key, {
+        url: null,
+        expiresAt: Date.now() + AVATAR_ERROR_TTL
+      });
+      return { profilePictureUrl: null };
+    }
   }
 }

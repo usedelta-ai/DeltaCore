@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from './services/api';
 import type { Agent, ChatMessage, Lead, LeadStatus } from './services/api';
 import { LoginScreen } from './components/features/LoginScreen';
+import { ChangePasswordScreen } from './components/features/ChangePasswordScreen';
 import { TopAppBar } from './components/layout/TopAppBar';
 
 import { useEmpresas } from './hooks/useEmpresas';
@@ -18,6 +19,7 @@ import { UsersPage } from './pages/UsersPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ImmersiveLeadView } from './pages/ImmersiveLeadView';
 import { PessoaModal } from './components/features/PessoaModal';
+import { ProfileModal } from './components/features/ProfileModal';
 import { PessoasPage } from './pages/PessoasPage';
 
 // Layout
@@ -27,10 +29,11 @@ export type Tab = 'empresas' | 'agents' | 'follow-ups' | 'leads' | 'messages' | 
 
 export default function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('auth-token'));
-  const [user, setUser] = useState<{ id: number; name: string; email: string; role: string; empresa_id?: number | null; empresa_name?: string | null; empresa_logo?: string | null } | null>(() => {
+  const [user, setUser] = useState<{ id: number; name: string; email: string; role: string; empresa_id?: number | null; empresa_name?: string | null; empresa_logo?: string | null; avatar?: string | null } | null>(() => {
     const cached = localStorage.getItem('auth-user');
     return cached ? JSON.parse(cached) : null;
   });
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   const isSuperAdmin = user?.role === 'superadmin';
   const companyId = user?.empresa_id || null;
@@ -101,7 +104,7 @@ export default function App() {
 
   const { empresas, createEmpresa, updateEmpresa, deleteEmpresa } = useEmpresas(token);
   const { agents, createAgent, updateAgent, deleteAgent } = useAgents(token);
-  const { leads, loading: leadsLoading, isFetching: leadsFetching, createLead, updateLead, deleteLead, refetch: refetchLeads } = useLeads(token, filterEmpresaId, filterAgentId);
+  const { leads, total: leadsTotal, summary: leadsSummary, loading: leadsLoading, isFetching: leadsFetching, isTransitioning: leadsTransitioning, createLead, updateLead, deleteLead, refetch: refetchLeads, searchTerm: leadsSearchTerm, setSearchTerm: setLeadsSearchTerm, month: leadsMonth, setMonth: setLeadsMonth } = useLeads(token, filterEmpresaId, filterAgentId);
   const { followUps, createFollowUp, updateFollowUp, deleteFollowUp } = useFollowUps(token);
 
   const currentCompany = companyId ? empresas.find(e => e.id === companyId) : null;
@@ -115,6 +118,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>(() => getRouteInfo().tab);
   const [showInactive, _setShowInactive] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [leadCreateTrigger, setLeadCreateTrigger] = useState(0);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [_error, setError] = useState<string | null>(null);
@@ -161,6 +165,7 @@ export default function App() {
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const [selectedPessoaId, setSelectedPessoaId] = useState<number | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Fetch empresa logo when user has empresa_id but no logo found
   useEffect(() => {
@@ -172,6 +177,21 @@ export default function App() {
       })
       .catch(() => {});
   }, [token, user?.empresa_id, systemLogo]);
+
+  useEffect(() => {
+    document.title = systemName;
+
+    const link = document.querySelector<HTMLLinkElement>('link#favicon');
+    if (link) {
+      if (systemLogo) {
+        link.href = systemLogo;
+        link.type = 'image/png';
+      } else {
+        link.href = '/logo.jpg';
+        link.type = 'image/jpeg';
+      }
+    }
+  }, [systemName, systemLogo]);
 
   const [evolutionInstances, setEvolutionInstances] = useState<any[]>([]);
   const [qrModal, setQrModal] = useState<{
@@ -210,10 +230,17 @@ export default function App() {
     });
   };
 
+  const agentsMap = useMemo(() => {
+    const map = new Map<number, Agent>();
+    agents.forEach(a => map.set(a.id, a));
+    return map;
+  }, [agents]);
+
   const getFilteredLeads = () => {
+    if (isSuperAdmin) return leads;
     return leads.filter(l => {
-      const agent = agents.find(a => a.id === l.agent_id);
-      return isSuperAdmin || (agent && agent.empresa_id === companyId);
+      const agent = agentsMap.get(l.agent_id);
+      return agent && agent.empresa_id === companyId;
     });
   };
 
@@ -228,7 +255,7 @@ export default function App() {
         const jidMatch = lead.remote_jid_alt && lead.remote_jid_alt.toLowerCase().includes(query);
         if (!nameMatch && !jidMatch) return;
       }
-      const agent = agents.find(a => a.id === lead.agent_id);
+      const agent = agentsMap.get(lead.agent_id);
       const agentId = agent?.id || 0;
       const agentName = agent?.name || (lead as any).agent_name || 'Sem Agente';
       const agentActive = agent ? agent.status !== 0 : ((lead as any).agent_status !== 0 && (lead as any).agent_status != null);
@@ -289,7 +316,7 @@ export default function App() {
     const groups: Record<number, { name: string; logo: string | null; agents: Record<number, { name: string; followUps: any[] }> }> = {};
 
     getFilteredFollowUps().forEach(fl => {
-      const agent = agents.find(a => a.id === fl.agent_id);
+      const agent = agentsMap.get(fl.agent_id);
       const agentId = agent?.id || 0;
       const agentName = agent?.name || 'Sem Agente';
 
@@ -622,14 +649,43 @@ export default function App() {
 
   const handleNewLead = () => {
     setLeadViewMode('dashboard');
-    openCreateForm();
+    setLeadCreateTrigger(prev => prev + 1);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('auth-token');
-    localStorage.removeItem('auth-user');
-    setToken(null);
-    setUser(null);
+  const handleAddButton = () => {
+    if (activeTab === 'leads') {
+      handleNewLead();
+    } else {
+      openCreateForm();
+    }
+  };
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setToken(null);
+      setUser(null);
+      setMustChangePassword(false);
+    };
+    const handleSessionRevoked = () => {
+      setToken(null);
+      setUser(null);
+      setMustChangePassword(false);
+      alert('Sua sessão foi encerrada porque outro login foi realizado com sua conta.');
+    };
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    window.addEventListener('auth:session-revoked', handleSessionRevoked);
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+      window.removeEventListener('auth:session-revoked', handleSessionRevoked);
+    };
+  }, []);
+
+  const handleAvatarUpdate = (avatar: string | null) => {
+    if (user) {
+      const updated = { ...user, avatar };
+      setUser(updated);
+      localStorage.setItem('auth-user', JSON.stringify(updated));
+    }
   };
 
   const navigateToTab = (tab: Tab) => {
@@ -645,6 +701,21 @@ export default function App() {
     setSelectedImmersiveLeadId(null);
   };
 
+  // Refresh user data (including avatar) on mount
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    api.getMe()
+      .then((freshUser: any) => {
+        if (!cancelled && freshUser) {
+          localStorage.setItem('auth-user', JSON.stringify(freshUser));
+          setUser(freshUser);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [token]);
+
   // Safe Navigation Handler
   useEffect(() => {
     const handlePopState = () => {
@@ -655,19 +726,46 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  const handleLoginSuccess = (newToken: string, newUser: any, newMustChangePassword: boolean) => {
+    localStorage.setItem('auth-token', newToken);
+    localStorage.setItem('auth-user', JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
+    setMustChangePassword(newMustChangePassword);
+
+    if (newMustChangePassword) return;
+
+    const tenantBase64 = getTenantBase64FromUrl();
+    const defaultTab = newUser.role === 'superadmin' ? 'empresas' : 'agents';
+    const path = tenantBase64 ? `/${tenantBase64}/${defaultTab}` : `/${defaultTab}`;
+    window.history.replaceState(null, '', path);
+    setActiveTab(defaultTab);
+  };
+
+  const handlePasswordChanged = () => {
+    setMustChangePassword(false);
+    const tenantBase64 = getTenantBase64FromUrl();
+    const defaultTab = user?.role === 'superadmin' ? 'empresas' : 'agents';
+    const path = tenantBase64 ? `/${tenantBase64}/${defaultTab}` : `/${defaultTab}`;
+    window.history.replaceState(null, '', path);
+    setActiveTab(defaultTab);
+  };
+
+  const handleLogout = () => {
+    api.logout().catch(() => {});
+    localStorage.removeItem('auth-token');
+    localStorage.removeItem('auth-user');
+    setToken(null);
+    setUser(null);
+    setMustChangePassword(false);
+  };
+
   if (!token || !user) {
-    return <LoginScreen onLoginSuccess={(newToken, newUser) => {
-      localStorage.setItem('auth-token', newToken);
-      localStorage.setItem('auth-user', JSON.stringify(newUser));
-      setToken(newToken);
-      setUser(newUser);
-      
-      const tenantBase64 = getTenantBase64FromUrl();
-      const defaultTab = newUser.role === 'superadmin' ? 'empresas' : 'agents';
-      const path = tenantBase64 ? `/${tenantBase64}/${defaultTab}` : `/${defaultTab}`;
-      window.history.replaceState(null, '', path);
-      setActiveTab(defaultTab);
-    }} />;
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  if (token && mustChangePassword) {
+    return <ChangePasswordScreen userName={user.name} onPasswordChanged={handlePasswordChanged} onLogout={handleLogout} />;
   }
 
   if (leadViewMode === 'immersive') {
@@ -697,6 +795,7 @@ export default function App() {
             pessoaId={selectedPessoaId}
             onClose={() => setSelectedPessoaId(null)}
             onLeadClick={(leadId) => {
+              setSelectedPessoaId(null);
               handleLeadClick(leadId);
             }}
           />
@@ -710,7 +809,7 @@ export default function App() {
       <SideNavBar
         activeTab={activeTab}
         onTabChange={navigateToTab}
-        onNewLead={handleNewLead}
+        onNewLead={handleAddButton}
         systemName={systemName}
         systemLogo={systemLogo}
         isSuperAdmin={isSuperAdmin}
@@ -723,14 +822,22 @@ export default function App() {
         onLogout={handleLogout}
         userName={user?.name}
       />
-      <TopAppBar />
+      <TopAppBar
+        onProfileClick={() => setIsProfileModalOpen(true)}
+        userAvatar={user?.avatar || null}
+        userName={user?.name}
+      />
       <main className={`${isMainSidebarCollapsed ? 'ml-20' : 'ml-64'} mt-16 ${activeTab === 'leads' && (leadViewMode === 'dashboard' || leadViewMode === null) ? 'px-5 py-4' : 'p-gutter'} min-h-[calc(100vh-64px)] overflow-x-auto`}>
         {activeTab === 'leads' && (leadViewMode === 'dashboard' || leadViewMode === null) && (
           <DashboardPage
             onLeadClick={handleLeadClick}
-            onNewLead={handleNewLead}
+onNewLead={handleAddButton}
+            createLead={createLead}
             leads={getFilteredLeads()}
+            leadsTotal={leadsTotal}
+            leadsSummary={leadsSummary}
             agents={agents}
+            agentsMap={agentsMap}
             empresas={empresas}
             updateLead={updateLead}
             onRefresh={refetchLeads}
@@ -741,6 +848,15 @@ export default function App() {
             onPessoaClick={setSelectedPessoaId}
             loading={leadsLoading}
             isFetching={leadsFetching}
+            filterTransitioning={leadsTransitioning}
+            searchTerm={leadsSearchTerm}
+            onSearchChange={setLeadsSearchTerm}
+            month={leadsMonth}
+            onMonthChange={setLeadsMonth}
+            hasWritePermission={hasWritePermission}
+            leadCreateTrigger={leadCreateTrigger}
+            isSuperAdmin={isSuperAdmin}
+            currentUserEmpresaId={companyId}
           />
         )}
 
@@ -853,9 +969,18 @@ export default function App() {
           pessoaId={selectedPessoaId}
           onClose={() => setSelectedPessoaId(null)}
           onLeadClick={(leadId) => {
-            // Open the lead immersive view WITHOUT closing the pessoa modal
+            setSelectedPessoaId(null);
             handleLeadClick(leadId);
           }}
+        />
+      )}
+
+      {user && (
+        <ProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          user={user}
+          onAvatarUpdate={handleAvatarUpdate}
         />
       )}
     </div>

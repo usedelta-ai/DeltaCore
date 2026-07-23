@@ -42,9 +42,12 @@ exports.agents = (0, pg_core_1.pgTable)('agents', {
     search_data: (0, pg_core_1.jsonb)('search_data'),
     validate: (0, pg_core_1.boolean)('validate').default(false).notNull(),
     validate_data: (0, pg_core_1.jsonb)('validate_data'),
+    custom_properties_schema: (0, pg_core_1.jsonb)('custom_properties_schema'),
     created_at: (0, pg_core_1.timestamp)('created_at', { withTimezone: true }).defaultNow(),
     updated_at: (0, pg_core_1.timestamp)('updated_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => [
+    (0, pg_core_1.index)('idx_agents_empresa_id').on(table.empresa_id),
+]);
 // 4. Tabela Follow Up Settings
 exports.follow_up_settings = (0, pg_core_1.pgTable)('follow_up_settings', {
     id: (0, pg_core_1.serial)('id').primaryKey(),
@@ -82,7 +85,14 @@ exports.lead = (0, pg_core_1.pgTable)('lead', {
     session_id: (0, pg_core_1.varchar)('session_id', { length: 255 }),
     pessoa_id: (0, pg_core_1.integer)('pessoa_id').references(() => exports.pessoa.id, { onDelete: 'set null' }),
     finalized_by: (0, pg_core_1.integer)('finalized_by').references(() => exports.users.id, { onDelete: 'set null' }),
-});
+}, (table) => [
+    (0, pg_core_1.index)('idx_lead_agent_id').on(table.agent_id),
+    (0, pg_core_1.index)('idx_lead_pessoa_id').on(table.pessoa_id),
+    (0, pg_core_1.index)('idx_lead_session_id').on(table.session_id),
+    (0, pg_core_1.index)('idx_lead_status_updated_at').on(table.status, table.updated_at),
+    (0, pg_core_1.index)('idx_lead_agent_id_status').on(table.agent_id, table.status),
+    (0, pg_core_1.index)('idx_lead_agent_status_updated_id').on(table.agent_id, table.status, table.updated_at, table.id),
+]);
 // 6. Tabela Messages
 exports.messages = (0, pg_core_1.pgTable)('messages', {
     id: (0, pg_core_1.serial)('id').primaryKey(),
@@ -97,7 +107,9 @@ exports.messages = (0, pg_core_1.pgTable)('messages', {
     quote_message_content: (0, pg_core_1.text)('quote_message_content'),
     user_id: (0, pg_core_1.integer)('user_id').references(() => exports.users.id, { onDelete: 'set null' }),
     created_at: (0, pg_core_1.timestamp)('created_at', { withTimezone: true }).defaultNow(),
-});
+}, (table) => [
+    (0, pg_core_1.index)('idx_messages_session_id_created_at').on(table.session_id, table.created_at),
+]);
 // 7. Tabela Lead History (Nova)
 exports.lead_history = (0, pg_core_1.pgTable)('lead_history', {
     id: (0, pg_core_1.serial)('id').primaryKey(),
@@ -109,4 +121,6 @@ exports.lead_history = (0, pg_core_1.pgTable)('lead_history', {
     old_value: (0, pg_core_1.text)('old_value'),
     new_value: (0, pg_core_1.text)('new_value'),
     created_at: (0, pg_core_1.timestamp)('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+    (0, pg_core_1.index)('idx_lead_history_lead_id').on(table.lead_id),
+]);

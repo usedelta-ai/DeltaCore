@@ -87,7 +87,7 @@ export const LeadListView: React.FC<LeadListViewProps> = ({
             {paginatedLeads.map((lead) => {
               const type = typeConfig[lead.type];
               const badgeClass = badgeStyles[lead.badge.variant] || 'bg-surface-container-highest text-on-surface-variant';
-              const avatarBg = lead.avatarType === 'ai' ? 'bg-blue-500' : 'bg-secondary';
+
 
               return (
                 <tr

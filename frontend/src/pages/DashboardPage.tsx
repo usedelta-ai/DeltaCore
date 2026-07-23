@@ -3,17 +3,22 @@ import { FilterBar } from '../components/features/FilterBar';
 import { KanbanBoard } from '../components/features/KanbanBoard';
 import { LeadListView } from '../components/features/LeadListView';
 import { SkeletonView } from '../components/ui/SkeletonView';
+import { CreateLeadModal } from '../components/features/CreateLeadModal';
 import type { LeadCardData } from '../components/features/LeadCard';
 import type { Lead, Agent, Empresa } from '../services/api';
-import { mapLeadToCardData, getStatusForColumn } from '../utils/leadMapper';
+import { mapLeadToCardData } from '../utils/leadMapper';
 
-const REFRESH_INTERVAL = 4;
+const REFRESH_INTERVAL = 12;
 
 interface DashboardPageProps {
   onLeadClick?: (leadId: number) => void;
   onNewLead?: () => void;
+  createLead?: (data: Partial<Lead>) => Promise<any>;
   leads: Lead[];
+  leadsTotal?: number;
+  leadsSummary?: Record<string, { total: number; value: number }>;
   agents: Agent[];
+  agentsMap: Map<number, Agent>;
   empresas: Empresa[];
   updateLead?: (id: number, data: Partial<Lead>) => Promise<any>;
   onRefresh?: () => void;
@@ -24,6 +29,15 @@ interface DashboardPageProps {
   onPessoaClick?: (pessoaId: number) => void;
   loading?: boolean;
   isFetching?: boolean;
+  filterTransitioning?: boolean;
+  searchTerm?: string;
+  onSearchChange?: (search: string) => void;
+  month?: string;
+  onMonthChange?: (month: string) => void;
+  hasWritePermission?: boolean;
+  leadCreateTrigger?: number;
+  isSuperAdmin?: boolean;
+  currentUserEmpresaId?: number | null;
 }
 
 function getColumnIdFromBadge(badgeLabel: string): string {
@@ -38,25 +52,44 @@ function getColumnIdFromBadge(badgeLabel: string): string {
   }
 }
 
-function buildColumns(leads: LeadCardData[]) {
+function getStatusFromColumnId(columnId: string): string {
+  switch (columnId) {
+    case 'ai-automated': return 'NOVO';
+    case 'human-attended': return 'HUMANO';
+    case 'finished': return 'FINALIZADO';
+    case 'billed': return 'CONCLUIDO';
+    default: return 'NOVO';
+  }
+}
+
+function buildColumns(leads: LeadCardData[], summary?: Record<string, { total: number; value: number }>) {
   const cols = [
-    { id: 'ai-automated', title: 'Lead em atendimento automatizado', dotColor: 'ai' as const },
-    { id: 'human-attended', title: 'Em Atendimento', dotColor: 'human' as const },
-    { id: 'finished', title: 'Finalizados', dotColor: 'purple' as const, emptyIcon: 'archive' },
-    { id: 'billed', title: 'Faturado', dotColor: 'success' as const, emptyIcon: 'add_shopping_cart' },
+    { id: 'ai-automated', title: 'Lead em atendimento automatizado', dotColor: 'ai' as const, summaryKey: 'NOVO' },
+    { id: 'human-attended', title: 'Em Atendimento', dotColor: 'human' as const, summaryKey: 'HUMANO' },
+    { id: 'finished', title: 'Finalizados', dotColor: 'purple' as const, emptyIcon: 'archive', summaryKey: 'FINALIZADO' },
+    { id: 'billed', title: 'Faturado', dotColor: 'success' as const, emptyIcon: 'add_shopping_cart', summaryKey: 'CONCLUIDO' },
   ] as const;
 
-  return cols.map(col => ({
-    ...col,
-    leads: leads.filter(l => getColumnIdFromBadge(l.badge.label) === col.id),
-  }));
+  return cols.map(col => {
+    const colLeads = leads.filter(l => getColumnIdFromBadge(l.badge.label) === col.id);
+    const summaryData = summary?.[col.summaryKey];
+    return {
+      ...col,
+      leads: colLeads,
+      totalCount: summaryData?.total ?? colLeads.length,
+      totalValue: summaryData?.value ?? 0,
+    };
+  });
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   onLeadClick,
-  onNewLead: _onNewLead,
+  createLead,
   leads,
+  leadsTotal: _leadsTotal,
+  leadsSummary,
   agents,
+  agentsMap,
   empresas,
   updateLead,
   onRefresh,
@@ -67,17 +100,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onPessoaClick,
   loading = false,
   isFetching = false,
+  filterTransitioning = false,
+  searchTerm = '',
+  onSearchChange,
+  month,
+  onMonthChange,
+  leadCreateTrigger = 0,
+  isSuperAdmin = true,
+  currentUserEmpresaId,
 }) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [draggedLeadId, setDraggedLeadId] = useState<number | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [hasLoadedForCurrentAgent, setHasLoadedForCurrentAgent] = useState(false);
   const [autoRefreshPaused, setAutoRefreshPaused] = useState(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  useEffect(() => {
+    if (leadCreateTrigger > 0) {
+      setShowCreateModal(true);
+    }
+  }, [leadCreateTrigger]);
 
   const isInitialAgentLoad = loading && !hasLoadedForCurrentAgent;
 
@@ -124,29 +171,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   }, [triggerRefresh, autoRefreshPaused]);
 
   const cardData = useMemo(() => {
-    let result = leads.map(lead => mapLeadToCardData(lead, agents));
-
-    if (searchTerm.trim()) {
-      const lower = searchTerm.toLowerCase();
-      result = result.filter(card => {
-        const nameMatch = card.name.toLowerCase().includes(lower);
-        const phoneMatch = card.phone ? card.phone.toLowerCase().includes(lower) : false;
-        return nameMatch || phoneMatch;
-      });
-    }
+    let result = leads.map(lead => mapLeadToCardData(lead, agentsMap));
 
     if (selectedStatus) {
       result = result.filter(card => card.badge.label === selectedStatus);
     }
 
     return result;
-  }, [leads, agents, searchTerm, selectedStatus]);
+  }, [leads, agentsMap, selectedStatus]);
 
-  const columns = useMemo(() => buildColumns(cardData), [cardData]);
+  const columns = useMemo(() => buildColumns(cardData, leadsSummary), [cardData, leadsSummary]);
 
   const companyOptions = useMemo(() =>
-    empresas.map(e => ({ value: String(e.id), label: e.name })),
-    [empresas]
+    isSuperAdmin ? empresas.map(e => ({ value: String(e.id), label: e.name })) : [],
+    [empresas, isSuperAdmin]
   );
 
   const agentOptions = useMemo(() =>
@@ -177,7 +215,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     const leadId = Number(leadIdStr);
     if (!leadId || !updateLead) return;
 
-    const newStatus = getStatusForColumn(columnId);
+    const newStatus = getStatusFromColumnId(columnId);
     const statusMap: Record<string, string> = {
       'NOVO': 'Novo Lead',
       'HUMANO': 'Em Atendimento',
@@ -188,13 +226,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     const statusText = statusMap[newStatus] || newStatus;
     const motive = `Alterado para ${statusText} via Kanban`;
 
-    updateLead(leadId, { status: newStatus, taken_motive: motive });
+    updateLead(leadId, { status: newStatus as Lead['status'], taken_motive: motive });
   };
 
   const handleCardClick = (id: number) => {
     onLeadClick?.(id);
   };
 
+  const handleSearchChange = (val: string) => {
+    onSearchChange?.(val);
+  };
+
+  const handleOpenCreate = () => {
+    setShowCreateModal(true);
+  };
+
+  const handleCreateLead = async (data: Partial<Lead>) => {
+    if (!createLead) return;
+    await createLead(data);
+    setShowCreateModal(false);
+  };
 
   return (
     <div className="min-h-[calc(100vh-64px)] pb-8">
@@ -207,7 +258,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           onCompanyChange={val => onFilterEmpresaChange?.(val)}
           onAgentChange={val => onFilterAgentChange?.(val)}
           searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
+          onSearchChange={handleSearchChange}
           selectedStatus={selectedStatus}
           onStatusChange={setSelectedStatus}
           companyOptions={companyOptions}
@@ -215,6 +266,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           countdown={countdown}
           isRefreshing={isRefreshing}
           onRefresh={triggerRefresh}
+          month={month}
+          onMonthChange={onMonthChange}
         />
       </div>
 
@@ -226,6 +279,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <KanbanBoard
               columns={columns}
               onCardClick={handleCardClick}
+              onNewLead={handleOpenCreate}
               onPessoaClick={onPessoaClick}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
@@ -233,6 +287,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               onDrop={handleDrop}
               dragOverColumn={dragOverColumn}
               draggedLeadId={draggedLeadId}
+              filterTransitioning={filterTransitioning}
             />
           ) : (
             <LeadListView
@@ -243,6 +298,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           )}
         </div>
       )}
+
+      <CreateLeadModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSave={handleCreateLead}
+        agents={agents}
+        selectedAgentFilter={Number(filterAgentId) || undefined}
+        isSuperAdmin={isSuperAdmin}
+        currentUserEmpresaId={currentUserEmpresaId}
+      />
     </div>
   );
 };

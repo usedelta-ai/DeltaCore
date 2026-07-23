@@ -27,6 +27,8 @@ export async function setupRoutes(app: FastifyInstance, controller: MainControll
 
   // Leads
   app.get('/api/leads', (req, rep) => controller.getLeads(req, rep));
+  app.get('/api/leads/summary', (req, rep) => controller.getLeadsSummary(req, rep));
+  app.get('/api/leads/avatars', (req, rep) => controller.getBulkAvatars(req, rep));
   app.get('/api/leads/:id', (req: any, rep) => controller.getLeadById(req, rep));
   app.get('/api/leads/:leadId/avatar', (req: any, rep) => controller.getLeadAvatar(req, rep));
   app.post('/api/leads', (req: any, rep) => controller.createLead(req, rep));
@@ -47,14 +49,19 @@ export async function setupRoutes(app: FastifyInstance, controller: MainControll
   app.get('/api/evolution/connect/:instanceName', (req: any, rep) => controller.connectEvolution(req, rep));
   app.get('/api/media/:instanceName/:messageId', (req: any, rep) => controller.getMediaByWhatsAppId(req, rep));
 
-  // Authentication (Public)
+  // Authentication
   app.post('/api/auth/login', (req: any, rep) => controller.login(req, rep));
+  app.post('/api/auth/change-password', (req: any, rep) => controller.changePassword(req, rep));
+  app.post('/api/auth/logout', (req: any, rep) => controller.logout(req, rep));
+  app.get('/api/auth/me', (req, rep) => controller.getMe(req, rep));
+  app.put('/api/auth/avatar', (req: any, rep) => controller.updateAvatar(req, rep));
 
   // Users (Protected)
   app.get('/api/users', (req, rep) => controller.getUsers(req, rep));
   app.post('/api/users', (req: any, rep) => controller.createUser(req, rep));
   app.put('/api/users/:id', (req: any, rep) => controller.updateUser(req, rep));
   app.delete('/api/users/:id', (req: any, rep) => controller.deleteUser(req, rep));
+  app.post('/api/users/:id/reset-password', (req: any, rep) => controller.resetUserPassword(req, rep));
 
   // Pessoas (Protected)
   app.get('/api/pessoas', (req, rep) => controller.getPessoas(req, rep));

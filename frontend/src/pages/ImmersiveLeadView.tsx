@@ -40,7 +40,7 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
   agents = [],
   onPessoaClick,
 }) => {
-  const { lead, chatHistory, timelineEvents, loading, error, refetch } = useLeadDetail(leadId);
+  const { lead, chatHistory, timelineEvents, loading, loadingHistory, error, refetch } = useLeadDetail(leadId);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [showFinalizationModal, setShowFinalizationModal] = useState(false);
@@ -337,9 +337,11 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
             onViewAllTimeline={() => setShowActivityModal(true)}
             onUpdateLead={handleUpdateLead}
             hasWritePermission={hasWritePermission}
+            isSuperAdmin={isSuperAdmin}
             onPessoaClick={onPessoaClick}
             formatCurrency={formatCurrency}
             formatDate={formatDate}
+            loadingMessages={loadingHistory}
           />
         </div>
       </main>

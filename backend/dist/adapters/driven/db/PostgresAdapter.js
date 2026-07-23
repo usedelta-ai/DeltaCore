@@ -108,6 +108,7 @@ class PostgresAdapter {
             search_data: schema.agents.search_data,
             validate: schema.agents.validate,
             validate_data: schema.agents.validate_data,
+            custom_properties_schema: schema.agents.custom_properties_schema,
             created_at: schema.agents.created_at,
             updated_at: schema.agents.updated_at,
             empresa_name: schema.empresa.name,
@@ -140,6 +141,7 @@ class PostgresAdapter {
             search_data: agent.search_data ?? defaultJson,
             validate: agent.validate ?? false,
             validate_data: agent.validate_data ?? defaultJson,
+            custom_properties_schema: agent.custom_properties_schema ?? null,
         })
             .returning();
         return res[0];
@@ -163,6 +165,7 @@ class PostgresAdapter {
             search_data: agent.search_data !== undefined ? (agent.search_data ?? defaultJson) : (current.search_data ?? defaultJson),
             validate: agent.validate ?? current.validate,
             validate_data: agent.validate_data !== undefined ? (agent.validate_data ?? defaultJson) : (current.validate_data ?? defaultJson),
+            custom_properties_schema: agent.custom_properties_schema !== undefined ? agent.custom_properties_schema : current.custom_properties_schema,
             updated_at: new Date(),
         })
             .where((0, drizzle_orm_1.eq)(schema.agents.id, id))
@@ -236,47 +239,119 @@ class PostgresAdapter {
             .returning();
         return res.length > 0;
     }
-    async getLeads(companyId, agentId) {
-        const conditions = [
-            (0, drizzle_orm_1.notInArray)(schema.lead.status, ['CANCELADO'])
-        ];
+    async getLeads(companyId, agentId, filters) {
+        const conditions = ["l.status != 'CANCELADO'"];
+        const params = [];
+        let paramIndex = 1;
         if (companyId !== undefined) {
-            conditions.push((0, drizzle_orm_1.eq)(schema.agents.empresa_id, companyId));
+            conditions.push(`a.empresa_id = $${paramIndex++}`);
+            params.push(companyId);
         }
         if (agentId !== undefined) {
-            conditions.push((0, drizzle_orm_1.eq)(schema.lead.agent_id, agentId));
+            conditions.push(`l.agent_id = $${paramIndex++}`);
+            params.push(agentId);
         }
-        const res = await db_1.db.select({
-            id: schema.lead.id,
-            agent_id: schema.lead.agent_id,
-            remote_jid_alt: schema.lead.remote_jid_alt,
-            name: schema.lead.name,
-            custom_properties: schema.lead.custom_properties,
-            status: schema.lead.status,
-            taken_over_at: schema.lead.taken_over_at,
-            take_over_expires_at: schema.lead.take_over_expires_at,
-            updated_at: schema.lead.updated_at,
-            created_at: schema.lead.created_at,
-            taken_motive: schema.lead.taken_motive,
-            value: schema.lead.value,
-            lastmessage: schema.lead.lastmessage,
-            follow_up_id: schema.lead.follow_up_id,
-            session_id: schema.lead.session_id,
-            pessoa_id: schema.lead.pessoa_id,
-            finalized_by: schema.lead.finalized_by,
-            finalized_by_name: schema.users.name,
-            translations: schema.agents.translations,
-            agent_name: schema.agents.name,
-            agent_status: schema.agents.status,
-            follow_up_message: schema.follow_up_settings.message,
-        })
-            .from(schema.lead)
-            .leftJoin(schema.agents, (0, drizzle_orm_1.eq)(schema.lead.agent_id, schema.agents.id))
-            .leftJoin(schema.follow_up_settings, (0, drizzle_orm_1.eq)(schema.lead.follow_up_id, schema.follow_up_settings.id))
-            .leftJoin(schema.users, (0, drizzle_orm_1.eq)(schema.lead.finalized_by, schema.users.id))
-            .where((0, drizzle_orm_1.and)(...conditions))
-            .orderBy((0, drizzle_orm_1.desc)(schema.lead.id));
-        return res;
+        if (filters?.status) {
+            conditions.push(`l.status = $${paramIndex++}`);
+            params.push(filters.status);
+        }
+        if (filters?.search) {
+            const searchPattern = `%${filters.search}%`;
+            conditions.push(`(l.name ILIKE $${paramIndex} OR l.remote_jid_alt ILIKE $${paramIndex})`);
+            params.push(searchPattern);
+            paramIndex++;
+        }
+        if (filters?.month) {
+            const [year, monthNum] = filters.month.split('-');
+            const monthStart = `${year}-${monthNum}-01`;
+            const nextM = Number(monthNum) === 12 ? 1 : Number(monthNum) + 1;
+            const nextY = Number(monthNum) === 12 ? Number(year) + 1 : Number(year);
+            const monthEnd = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+            conditions.push(`(l.status = 'HUMANO' OR (l.created_at >= $${paramIndex}::timestamp AND l.created_at < $${paramIndex + 1}::timestamp))`);
+            params.push(monthStart, monthEnd);
+            paramIndex += 2;
+        }
+        const whereClause = conditions.join(' AND ');
+        // Use window function to get total count in same query (avoids double query)
+        const selectColumns = `
+      l.id, l.agent_id, l.remote_jid_alt, l.name, l.custom_properties, l.status,
+      l.taken_over_at, l.take_over_expires_at, l.updated_at, l.created_at,
+      l.taken_motive, l.value, l.lastmessage, l.follow_up_id, l.session_id,
+      l.pessoa_id, l.finalized_by,
+      a.name as agent_name, a.translations, a.status as agent_status,
+      COUNT(*) OVER() as total_count
+    `;
+        let query = `
+      SELECT ${selectColumns}
+      FROM "lead" l
+      LEFT JOIN "agents" a ON a.id = l.agent_id
+      WHERE ${whereClause}
+      ORDER BY l.updated_at DESC, l.id DESC
+    `;
+        const shouldPaginate = !filters?.month && filters?.page && filters?.pageSize;
+        if (shouldPaginate) {
+            const offset = (filters.page - 1) * filters.pageSize;
+            query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+            params.push(filters.pageSize, offset);
+        }
+        const result = await db_1.default.query(query, params);
+        const rows = result.rows;
+        const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+        const data = rows.map(row => {
+            const { total_count, ...leadData } = row;
+            return leadData;
+        });
+        return { data: data, total };
+    }
+    async getLeadsSummary(companyId, agentId, search, month) {
+        const conditions = ["l.status != 'CANCELADO'"];
+        const params = [];
+        let paramIndex = 1;
+        if (companyId !== undefined) {
+            conditions.push(`a.empresa_id = $${paramIndex++}`);
+            params.push(companyId);
+        }
+        if (agentId !== undefined) {
+            conditions.push(`l.agent_id = $${paramIndex++}`);
+            params.push(agentId);
+        }
+        if (search) {
+            const pattern = `%${search}%`;
+            conditions.push(`(l.name ILIKE $${paramIndex} OR l.remote_jid_alt ILIKE $${paramIndex})`);
+            params.push(pattern);
+            paramIndex++;
+        }
+        if (month) {
+            const [year, monthNum] = month.split('-');
+            const monthStart = `${year}-${monthNum}-01`;
+            const nextM = Number(monthNum) === 12 ? 1 : Number(monthNum) + 1;
+            const nextY = Number(monthNum) === 12 ? Number(year) + 1 : Number(year);
+            const monthEnd = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+            conditions.push(`(l.status = 'HUMANO' OR (l.created_at >= $${paramIndex}::timestamp AND l.created_at < $${paramIndex + 1}::timestamp))`);
+            params.push(monthStart, monthEnd);
+            paramIndex += 2;
+        }
+        const sql = `
+      SELECT l.status, COUNT(*)::int as total, COALESCE(SUM(COALESCE(l.value, 0)), 0) as value
+      FROM "lead" l
+      LEFT JOIN "agents" a ON a.id = l.agent_id
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY l.status
+    `;
+        const result = await db_1.default.query(sql, params);
+        const rows = result.rows;
+        const summary = {
+            NOVO: { total: 0, value: 0 },
+            HUMANO: { total: 0, value: 0 },
+            FINALIZADO: { total: 0, value: 0 },
+            CONCLUIDO: { total: 0, value: 0 },
+        };
+        for (const row of rows) {
+            if (summary[row.status]) {
+                summary[row.status] = { total: Number(row.total), value: Number(row.value) };
+            }
+        }
+        return summary;
     }
     async getLeadById(id) {
         const res = await db_1.db.select({
@@ -303,6 +378,32 @@ class PostgresAdapter {
             .leftJoin(schema.users, (0, drizzle_orm_1.eq)(schema.lead.finalized_by, schema.users.id))
             .where((0, drizzle_orm_1.eq)(schema.lead.id, id));
         return res[0] || null;
+    }
+    async getLeadsByIds(ids) {
+        if (ids.length === 0)
+            return [];
+        const res = await db_1.db.select({
+            id: schema.lead.id,
+            agent_id: schema.lead.agent_id,
+            remote_jid_alt: schema.lead.remote_jid_alt,
+            name: schema.lead.name,
+            custom_properties: schema.lead.custom_properties,
+            status: schema.lead.status,
+            taken_over_at: schema.lead.taken_over_at,
+            take_over_expires_at: schema.lead.take_over_expires_at,
+            updated_at: schema.lead.updated_at,
+            created_at: schema.lead.created_at,
+            taken_motive: schema.lead.taken_motive,
+            value: schema.lead.value,
+            lastmessage: schema.lead.lastmessage,
+            follow_up_id: schema.lead.follow_up_id,
+            session_id: schema.lead.session_id,
+            pessoa_id: schema.lead.pessoa_id,
+            finalized_by: schema.lead.finalized_by,
+        })
+            .from(schema.lead)
+            .where((0, drizzle_orm_1.inArray)(schema.lead.id, ids));
+        return res;
     }
     async createLead(lead) {
         const res = await db_1.db.insert(schema.lead)

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { EditorWrapper } from '../ui/EditorWrapper';
 import { Avatar } from '../ui/Avatar';
+import { SchemaVisualEditor } from './SchemaVisualEditor';
 import type { Empresa } from '../../services/api';
 
 interface CursorState {
@@ -43,6 +44,7 @@ interface AgentFormData {
   validate_itens: string;
   validate_filters: string;
   validate_schema: string;
+  custom_properties_schema: string;
 }
 
 interface AgentEditModalProps {
@@ -99,6 +101,7 @@ function buildInitialFormData(data: unknown, defaultEmpresaId: number): AgentFor
     validate_itens: extractField(vd, 'itens'),
     validate_filters: extractField(vd, 'filters'),
     validate_schema: extractField(vd, 'schema'),
+    custom_properties_schema: serializeJSON(d?.custom_properties_schema, '{"fields":[]}'),
   };
 }
 
@@ -116,6 +119,7 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
     buildInitialFormData(initialData, empresas[0]?.id || 0)
   );
   const [activeTab, setActiveTab] = useState('prompt');
+  const [schemaViewMode, setSchemaViewMode] = useState<'visual' | 'code'>('visual');
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedCursorPos, setSavedCursorPos] = useState<CursorState['cursor']>(null);
@@ -142,6 +146,7 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
   const tabs: TabConfig[] = useMemo(() => [
     { key: 'prompt', label: 'Prompt Principal', language: 'plaintext', dataKey: 'prompt', enabled: true },
     { key: 'translations', label: 'Traduções', language: 'json', dataKey: 'translations', enabled: true },
+    { key: 'custom_properties_schema', label: 'Schema de Lead', language: 'json', dataKey: 'custom_properties_schema', enabled: true },
     { key: 'search_itens', label: 'Busca Semântica', language: 'json', dataKey: 'search_itens', enabled: formData.search },
     { key: 'search_filters', label: 'Busca - Filtros', language: 'json', dataKey: 'search_filters', enabled: formData.search },
     { key: 'search_schema', label: 'Busca - Schema', language: 'json', dataKey: 'search_schema', enabled: formData.search },
@@ -197,6 +202,9 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
     setSavedCursorPos(next?.cursor || null);
     setSavedScrollPos(next?.scrollTop ?? null);
     setActiveTab(tabKey);
+    if (tabKey === 'custom_properties_schema') {
+      setSchemaViewMode('visual');
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -240,6 +248,7 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
           filters: parseField(formData.validate_filters),
           schema: parseField(formData.validate_schema),
         },
+        custom_properties_schema: parseField(formData.custom_properties_schema),
       };
 
       await onSave(payload);
@@ -312,48 +321,50 @@ export const AgentEditModal: React.FC<AgentEditModalProps> = ({
               })}
             </div>
 
-            {/* Code Editor Interface */}
-            <div className="flex-1 bg-surface-container-lowest mx-4 mb-6 rounded-b-xl border border-outline-variant flex flex-col shadow-sm min-h-0">
-              <div className="bg-surface-container-low px-4 py-2 border-b border-outline-variant flex items-center justify-between flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-error/40" />
-                  <span className="w-3 h-3 rounded-full bg-secondary-fixed/40" />
-                  <span className="w-3 h-3 rounded-full bg-status-success/40" />
-                  <span className="ml-4 text-[10px] font-mono text-outline uppercase tracking-widest">
-                    {activeTabConfig.label.replace(/\s/g, '_')}.{activeTabConfig.language === 'json' ? 'json' : 'xml'}
-                  </span>
+            {/* Schema Visual Editor or Code Editor */}
+            {activeTab === 'custom_properties_schema' && schemaViewMode === 'visual' ? (
+              <SchemaVisualEditor
+                value={formData.custom_properties_schema}
+                onChange={(val) => setFormData(prev => ({ ...prev, custom_properties_schema: val }))}
+                onSwitchToCode={() => setSchemaViewMode('code')}
+              />
+            ) : (
+              <div className="flex-1 bg-surface-container-lowest mx-4 mb-6 rounded-b-xl border border-outline-variant flex flex-col shadow-sm min-h-0">
+                <div className="bg-surface-container-low px-4 py-2 border-b border-outline-variant flex items-center justify-between flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-error/40" />
+                    <span className="w-3 h-3 rounded-full bg-secondary-fixed/40" />
+                    <span className="w-3 h-3 rounded-full bg-status-success/40" />
+                    <span className="ml-4 text-[10px] font-mono text-outline uppercase tracking-widest">
+                      {activeTabConfig.label.replace(/\s/g, '_')}.{activeTabConfig.language === 'json' ? 'json' : 'xml'}
+                    </span>
+                  </div>
+                  {activeTab === 'custom_properties_schema' && (
+                    <button
+                      onClick={() => setSchemaViewMode('visual')}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                    >
+                      <span className="material-symbols-outlined text-sm">view_quilt</span>
+                      Editor Visual
+                    </button>
+                  )}
                 </div>
-                <button
-                  className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                  onClick={() => {
-                    const textarea = document.querySelector('.monaco-editor');
-                    if (textarea) textarea.classList.add('opacity-50');
-                    setTimeout(() => {
-                      if (textarea) textarea.classList.remove('opacity-50');
-                    }, 800);
-                  }}
-                >
-                  <span className="material-symbols-outlined text-sm">auto_fix</span>
-                  Melhorar com IA
-                </button>
+                <div className="flex-1 min-h-0">
+                  <EditorWrapper
+                    key={`${activeTab}-${editingId ?? 'new'}`}
+                    itemKey={`${activeTab}-${editingId ?? 'new'}`}
+                    initialValue={getEditorValue()}
+                    onChange={handleEditorChange}
+                    language={activeTabConfig.language}
+                    cursorPosition={savedCursorPos}
+                    scrollPosition={savedScrollPos}
+                    onMount={handleEditorMount}
+                    onCursorChange={handleCursorChange}
+                    onScrollChange={handleScrollChange}
+                  />
+                </div>
               </div>
-
-              {/* Editor */}
-              <div className="flex-1 min-h-0">
-                <EditorWrapper
-                  key={`${activeTab}-${editingId ?? 'new'}`}
-                  itemKey={`${activeTab}-${editingId ?? 'new'}`}
-                  initialValue={getEditorValue()}
-                  onChange={handleEditorChange}
-                  language={activeTabConfig.language}
-                  cursorPosition={savedCursorPos}
-                  scrollPosition={savedScrollPos}
-                  onMount={handleEditorMount}
-                  onCursorChange={handleCursorChange}
-                  onScrollChange={handleScrollChange}
-                />
-              </div>
-            </div>
+            )}
           </section>
 
           {/* RIGHT SIDE: SETTINGS */}

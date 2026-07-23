@@ -160,14 +160,35 @@ export class MainController {
   // ---------------------------------------------------------------------------
   async getLeads(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const { empresa, agente } = request.query as any;
+      const { empresa, agente, search, page, pageSize, status, month } = request.query as any;
       const data = await this.leadUsecases.getLeads(request.user!, {
         empresaId: empresa ? Number(empresa) : undefined,
-        agentId: agente ? Number(agente) : undefined
+        agentId: agente ? Number(agente) : undefined,
+        search: search || undefined,
+        page: page ? Number(page) : 1,
+        pageSize: pageSize ? Number(pageSize) : 30,
+        status: status || undefined,
+        month: month || undefined,
       });
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch leads.' });
+    }
+  }
+
+  async getLeadsSummary(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { empresa, agente, search, month } = request.query as any;
+      const data = await this.leadUsecases.getLeadsSummary(request.user!, {
+        empresaId: empresa ? Number(empresa) : undefined,
+        agentId: agente ? Number(agente) : undefined,
+        search: search || undefined,
+        month: month || undefined,
+      });
+      return data;
+    } catch (err: any) {
+      console.error('getLeadsSummary error:', err?.message, err?.stack);
+      reply.status(500).send({ error: err.message || 'Failed to fetch leads summary.' });
     }
   }
 
@@ -179,6 +200,18 @@ export class MainController {
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch lead.' });
+    }
+  }
+
+  async getBulkAvatars(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { ids } = request.query as any;
+      if (!ids) return {};
+      const idList = String(ids).split(',').map(Number).filter(Boolean);
+      const data = await this.leadUsecases.getBulkAvatars(request.user!, idList);
+      return data;
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to fetch avatars.' });
     }
   }
 
@@ -331,10 +364,83 @@ export class MainController {
   async login(request: FastifyRequest<{ Body: any }>, reply: FastifyReply) {
     const { email, password, empresaId } = request.body as any;
     try {
-      const data = await this.userUsecases.login(email, password, empresaId !== undefined ? Number(empresaId) : undefined);
+      const ip = request.ip;
+      const ua = request.headers['user-agent'];
+      const deviceInfo = typeof ua === 'string' ? ua : null;
+      const data = await this.userUsecases.login(
+        email,
+        password,
+        empresaId !== undefined ? Number(empresaId) : undefined,
+        ip,
+        deviceInfo
+      );
       return data;
     } catch (err: any) {
       reply.status(401).send({ error: err.message || 'Login failed.' });
+    }
+  }
+
+  async changePassword(request: FastifyRequest<{ Body: { currentPassword: string; newPassword: string } }>, reply: FastifyReply) {
+    try {
+      const userId = request.user!.userId!;
+      const { currentPassword, newPassword } = request.body;
+      await this.userUsecases.changePassword(userId, currentPassword, newPassword);
+      return { message: 'Password changed successfully' };
+    } catch (err: any) {
+      reply.status(400).send({ error: err.message || 'Failed to change password.' });
+    }
+  }
+
+  async resetUserPassword(request: FastifyRequest<{ Params: { id: string }; Body: { newPassword: string } }>, reply: FastifyReply) {
+    try {
+      const targetUserId = parseInt(request.params.id, 10);
+      const { newPassword } = request.body;
+      await this.userUsecases.resetUserPassword(request.user!, targetUserId, newPassword);
+      return { message: 'Password reset successfully. User must change password on next login.' };
+    } catch (err: any) {
+      reply.status(400).send({ error: err.message || 'Failed to reset password.' });
+    }
+  }
+
+  async updateAvatar(request: FastifyRequest<{ Body: { avatar: string | null } }>, reply: FastifyReply) {
+    try {
+      const { avatar } = request.body;
+      const updatedUser = await this.userUsecases.updateAvatar(request.user!, avatar);
+      return { avatar: updatedUser.avatar };
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to update avatar.' });
+    }
+  }
+
+  async logout(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const authHeader = request.headers['authorization'];
+      const token = authHeader?.substring(7);
+      if (token) {
+        await this.userUsecases.logout(token);
+      }
+      return { message: 'Logged out successfully' };
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to logout.' });
+    }
+  }
+
+  async getMe(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const userId = request.user!.userId!;
+      const currentUser = await this.userUsecases.getUserById(request.user!, userId);
+      if (!currentUser) return reply.status(404).send({ error: 'User not found' });
+      return {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        role: currentUser.role,
+        empresa_id: currentUser.empresa_id,
+        avatar: currentUser.avatar,
+        must_change_password: currentUser.must_change_password,
+      };
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message || 'Failed to get user info.' });
     }
   }
 

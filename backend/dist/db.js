@@ -52,9 +52,9 @@ exports.default = pool;
 async function checkTableExists(tableName) {
     const query = `
     SELECT EXISTS (
-      SELECT FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      AND table_name = $1
+      SELECT FROM pg_tables 
+      WHERE schemaname = 'public' 
+      AND tablename = $1
     );
   `;
     try {

@@ -22,6 +22,8 @@ interface FilterBarProps {
   countdown?: number;
   isRefreshing?: boolean;
   onRefresh?: () => void;
+  month?: string;
+  onMonthChange?: (month: string) => void;
 }
 
 interface FilterSelectProps {
@@ -50,6 +52,22 @@ const FilterSelect: React.FC<FilterSelectProps> = ({ icon, value, onChange, opti
   </div>
 );
 
+function buildMonthOptions(): FilterOption[] {
+  const months: FilterOption[] = [];
+  const now = new Date();
+  const monthNames = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    months.push({ value: `${y}-${m}`, label: `${monthNames[d.getMonth()]} ${y}` });
+  }
+  return months;
+}
+
 export const FilterBar: React.FC<FilterBarProps> = ({
   companyOptions = [],
   agentOptions = [],
@@ -66,6 +84,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   countdown,
   isRefreshing,
   onRefresh,
+  month,
+  onMonthChange,
 }) => {
   const statusOptions = [
     { value: '', label: 'Todas as Situações' },
@@ -74,6 +94,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     { value: 'FINALIZADO', label: 'Finalizado' },
     { value: 'CONCLUIDO', label: 'Faturado' },
   ];
+
+  const monthOptions = buildMonthOptions();
 
   return (
     <div className="flex items-center justify-between gap-3 mb-8 w-full px-4 flex-wrap">
@@ -116,6 +138,15 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           minWidth="180px"
         />
 
+        {/* Month */}
+        <FilterSelect
+          icon="calendar_month"
+          value={month || ''}
+          onChange={val => onMonthChange?.(val)}
+          options={monthOptions}
+          minWidth="160px"
+        />
+
         {/* Status */}
         <FilterSelect
           icon="label"
@@ -141,7 +172,6 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               refresh
             </span>
             <span className="text-[12px] font-medium tabular-nums w-4 text-left">{countdown}s</span>
-            {/* Ring progress */}
             <svg width="18" height="18" className="-rotate-90 shrink-0">
               <circle
                 cx="9" cy="9" r="7"
@@ -157,7 +187,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                 strokeOpacity="0.7"
                 strokeWidth="1.5"
                 strokeDasharray={2 * Math.PI * 7}
-                strokeDashoffset={2 * Math.PI * 7 * (1 - countdown / 4)}
+                strokeDashoffset={2 * Math.PI * 7 * (1 - countdown / 12)}
                 strokeLinecap="round"
                 style={{ transition: 'stroke-dashoffset 0.9s linear' }}
               />

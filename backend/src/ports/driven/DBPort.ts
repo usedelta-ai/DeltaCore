@@ -2,7 +2,7 @@ import { Empresa } from '../../domain/entities/Empresa';
 import { Agent } from '../../domain/entities/Agent';
 import { Lead } from '../../domain/entities/Lead';
 import { FollowUpSetting, ChatMessage } from '../../domain/entities/FollowUp';
-import { User } from '../../domain/entities/User';
+import { User, UserSession } from '../../domain/entities/User';
 import { Pessoa } from '../../domain/entities/Pessoa';
 
 export interface DBPort {
@@ -26,8 +26,10 @@ export interface DBPort {
   deleteFollowUpSetting(id: number): Promise<boolean>;
 
   // Leads
-  getLeads(companyId?: number, agentId?: number): Promise<Lead[]>;
+  getLeads(companyId?: number, agentId?: number, filters?: { search?: string; page?: number; pageSize?: number; status?: string; month?: string }): Promise<{ data: Lead[]; total: number }>;
+  getLeadsSummary(companyId?: number, agentId?: number, search?: string, month?: string): Promise<Record<string, { total: number; value: number }>>;
   getLeadById(id: number): Promise<Lead | null>;
+  getLeadsByIds(ids: number[]): Promise<Lead[]>;
   createLead(lead: Omit<Lead, 'id'>): Promise<Lead>;
   updateLead(id: number, lead: Partial<Lead>): Promise<Lead>;
   deleteLead(id: number): Promise<boolean>;
@@ -54,9 +56,19 @@ export interface DBPort {
   // Users
   getUsers(companyId?: number): Promise<User[]>;
   getUserByEmail(email: string): Promise<User | null>;
+  getUserById(id: number): Promise<User | null>;
   createUser(user: Omit<User, 'id'>): Promise<User>;
   updateUser(id: number, user: Partial<User>): Promise<User>;
   deleteUser(id: number): Promise<boolean>;
+  updateUserPassword(userId: number, newPasswordHash: string): Promise<void>;
+
+  // User Sessions
+  createSession(session: Omit<UserSession, 'id'>): Promise<UserSession>;
+  getSessionByToken(token: string): Promise<UserSession | null>;
+  revokeUserSessions(userId: number): Promise<void>;
+  revokeSession(sessionId: number): Promise<void>;
+  updateSessionActivity(sessionId: number): Promise<void>;
+  getActiveSessionsByUserId(userId: number): Promise<UserSession[]>;
 
   // Lead History log
   getLeadHistoryChanges(leadId: number): Promise<any[]>;

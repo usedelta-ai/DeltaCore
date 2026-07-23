@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "npx ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc && cp -r src/db/migrations dist/db/migrations",
+    "build": "tsc && cp -r src/db/migrations/. dist/db/migrations/",
     "start": "node dist/server.js"
   },
   "dependencies": {

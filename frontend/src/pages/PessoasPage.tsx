@@ -7,21 +7,11 @@ import { Pagination } from '../components/ui/Pagination';
 import { SkeletonView } from '../components/ui/SkeletonView';
 import { LeadAvatar } from '../components/features/LeadAvatar';
 import { usePessoas } from '../hooks/usePessoas';
-import type { Pessoa, Lead } from '../services/api';
+import type { Lead } from '../services/api';
 
 interface PessoasPageProps {
   onPessoaClick: (id: number) => void;
   leads?: Lead[];
-}
-
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0])
-    .join('')
-    .toUpperCase();
 }
 
 const formatDate = (dateStr?: string | null) => {

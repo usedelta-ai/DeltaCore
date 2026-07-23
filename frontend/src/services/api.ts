@@ -6,6 +6,20 @@ export function getBoardUrl(empresaId: number, empresaName: string): string {
   return `${BOARD_URL}/${token}/board`;
 }
 
+let sessionExpired = false;
+
+function forceLogout(code?: string) {
+  if (sessionExpired) return;
+  sessionExpired = true;
+  localStorage.removeItem('auth-token');
+  localStorage.removeItem('auth-user');
+  if (code === 'SESSION_REVOKED') {
+    window.dispatchEvent(new CustomEvent('auth:session-revoked'));
+  } else {
+    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_URL}${path}`;
   const token = localStorage.getItem('auth-token') || '';
@@ -30,6 +44,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      const errorData = await response.json().catch(() => ({}));
+      forceLogout(errorData.code);
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
   }
@@ -62,6 +81,7 @@ export interface Agent {
   search_data?: any;
   validate?: boolean;
   validate_data?: any;
+  custom_properties_schema?: any;
   evolution_status?: string;
 }
 
@@ -174,14 +194,28 @@ export const api = {
   }),
 
   // Leads
-  getLeads: (empresa?: string, agente?: string) => {
+  getLeads: (empresa?: string, agente?: string, search?: string, page?: number, pageSize?: number, status?: string, month?: string) => {
     const params = new URLSearchParams();
     if (empresa) params.append('empresa', empresa);
     if (agente) params.append('agente', agente);
-    return request<Lead[]>(`/api/leads?${params.toString()}`);
+    if (search) params.append('search', search);
+    if (page) params.append('page', String(page));
+    if (pageSize) params.append('pageSize', String(pageSize));
+    if (status) params.append('status', status);
+    if (month) params.append('month', month);
+    return request<{ data: Lead[]; total: number }>(`/api/leads?${params.toString()}`);
+  },
+  getLeadsSummary: (empresa?: string, agente?: string, search?: string, month?: string) => {
+    const params = new URLSearchParams();
+    if (empresa) params.append('empresa', empresa);
+    if (agente) params.append('agente', agente);
+    if (search) params.append('search', search);
+    if (month) params.append('month', month);
+    return request<Record<string, { total: number; value: number }>>(`/api/leads/summary?${params.toString()}`);
   },
   getLeadById: (id: number) => request<Lead>(`/api/leads/${id}`),
   getLeadAvatar: (leadId: number) => request<{ url: string | null }>(`/api/leads/${leadId}/avatar`),
+  getBulkAvatars: (ids: number[]) => request<Record<number, string | null>>(`/api/leads/avatars?ids=${ids.join(',')}`),
   createLead: (data: Partial<Lead>) => request<Lead>('/api/leads', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -231,11 +265,25 @@ export const api = {
   connectEvolutionInstance: (instanceName: string) => request<any>(`/api/evolution/connect/${instanceName}`),
   getMediaByWhatsAppId: (instanceName: string, messageId: string) => request<{ base64: string }>(`/api/media/${instanceName}/${messageId}`),
 
-  // Users & Auth
-  login: (data: any) => request<any>('/api/auth/login', {
+  // Auth
+  updateMyAvatar: (avatar: string | null) => request<{ avatar: string | null }>('/api/auth/avatar', {
+    method: 'PUT',
+    body: JSON.stringify({ avatar }),
+  }),
+  login: (data: any) => request<{ token: string; must_change_password: boolean; user: any }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  changePassword: (data: { currentPassword: string; newPassword: string }) => request<{ message: string }>('/api/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  logout: () => request<{ message: string }>('/api/auth/logout', {
+    method: 'POST',
+  }),
+  getMe: () => request<any>('/api/auth/me'),
+
+  // Users
   getUsers: () => request<User[]>('/api/users'),
   createUser: (data: Partial<User>) => request<User>('/api/users', {
     method: 'POST',
@@ -247,6 +295,10 @@ export const api = {
   }),
   deleteUser: (id: number) => request<{ message: string }>(`/api/users/${id}`, {
     method: 'DELETE',
+  }),
+  resetUserPassword: (id: number, newPassword: string) => request<{ message: string }>(`/api/users/${id}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ newPassword }),
   }),
 };
 

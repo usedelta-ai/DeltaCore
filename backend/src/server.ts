@@ -17,7 +17,7 @@ import { MainController } from './adapters/driver/http/controllers/MainControlle
 import { setupRoutes } from './adapters/driver/http/routes';
 import { runMigrations } from './db/migrate';
 
-const app = fastify({ logger: true });
+const app = fastify({ logger: true, bodyLimit: 5 * 1024 * 1024 });
 
 // Enable CORS
 app.register(cors, {

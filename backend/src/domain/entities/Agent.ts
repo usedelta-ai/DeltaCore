@@ -12,6 +12,7 @@ export interface Agent {
   search_data?: string | Record<string, any> | null;
   validate: boolean;
   validate_data?: string | Record<string, any> | null;
+  custom_properties_schema?: Record<string, any> | null;
   created_at?: Date;
   updated_at?: Date;
   empresa_name?: string;

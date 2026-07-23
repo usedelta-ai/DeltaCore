@@ -13,10 +13,38 @@ class PessoaUsecasesImpl {
         return this.db.getPessoaById(id);
     }
     async createPessoa(user, pessoa) {
-        return this.db.createPessoa(pessoa);
+        const created = await this.db.createPessoa(pessoa);
+        // Auto-link leads by phone number
+        try {
+            const leads = await this.db.getLeadsByPhone(created.phone);
+            for (const lead of leads) {
+                if (lead.id) {
+                    await this.db.updateLead(lead.id, { pessoa_id: created.id });
+                }
+            }
+        }
+        catch (e) {
+            console.error('Erro ao auto-vincular leads na criação de pessoa:', e);
+        }
+        return created;
     }
     async updatePessoa(user, id, pessoa) {
-        return this.db.updatePessoa(id, pessoa);
+        const updated = await this.db.updatePessoa(id, pessoa);
+        // If phone is updated, auto-link leads with the new phone
+        if (pessoa.phone) {
+            try {
+                const leads = await this.db.getLeadsByPhone(updated.phone);
+                for (const lead of leads) {
+                    if (lead.id) {
+                        await this.db.updateLead(lead.id, { pessoa_id: updated.id });
+                    }
+                }
+            }
+            catch (e) {
+                console.error('Erro ao auto-vincular leads na atualização de pessoa:', e);
+            }
+        }
+        return updated;
     }
     async deletePessoa(user, id) {
         return this.db.deletePessoa(id);

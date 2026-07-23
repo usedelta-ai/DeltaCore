@@ -5,24 +5,20 @@ interface LeadAvatarProps {
   leadId: number;
   avatarType: 'ai' | 'human';
   avatarLabel: string;
+  src?: string | null;
   className?: string;
 }
 
-/**
- * Displays a lead's WhatsApp profile picture fetched asynchronously from
- * the Evolution API. Uses TanStack Query with 30-minute stale/refetch.
- *
- * Falls back to the initials avatar (avatarLabel) while loading or if no image
- * is available — matching the existing behaviour.
- */
 export const LeadAvatar: React.FC<LeadAvatarProps> = ({
   leadId,
   avatarType,
   avatarLabel,
+  src,
   className = '',
 }) => {
-  const { data: src } = useLeadAvatar(leadId, avatarType !== 'ai');
+  const { data: fetchedSrc } = useLeadAvatar(leadId, avatarType !== 'ai' && !src);
 
+  const avatarSrc = src ?? fetchedSrc;
   const avatarBg = avatarType === 'ai' ? 'bg-blue-500' : 'bg-secondary';
 
   return (
@@ -31,8 +27,8 @@ export const LeadAvatar: React.FC<LeadAvatarProps> = ({
     >
       {avatarType === 'ai' ? (
         'Δ'
-      ) : src ? (
-        <img src={src} alt="" className="w-full h-full object-cover" />
+      ) : avatarSrc ? (
+        <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
       ) : (
         avatarLabel
       )}

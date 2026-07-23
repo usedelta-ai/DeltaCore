@@ -1,8 +1,8 @@
 import type { Lead, Agent } from '../services/api';
 import type { LeadCardData } from '../components/features/LeadCard';
 
-export function mapLeadToCardData(lead: Lead, agents: Agent[]): LeadCardData {
-  const agent = agents.find(a => a.id === lead.agent_id);
+export function mapLeadToCardData(lead: Lead, agentsMap: Map<number, Agent>): LeadCardData {
+  const agent = agentsMap.get(lead.agent_id);
   const empresa = agent?.empresa_name || '';
 
   let type: LeadCardData['type'] = 'human';

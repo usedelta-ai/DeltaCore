@@ -13,19 +13,7 @@ export type TimelineEvent = {
   description?: string;
 };
 
-function mergeMessages(a: ChatMessage[], b: ChatMessage[]): ChatMessage[] {
-  const seen = new Set<string | number>();
-  const merged: ChatMessage[] = [];
-  for (const msg of [...a, ...b]) {
-    if (!seen.has(msg.id)) {
-      seen.add(msg.id);
-      merged.push(msg);
-    }
-  }
-  return merged.sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
-}
+
 
 function buildTimelineEvents(merged: ChatMessage[], lead: Lead): TimelineEvent[] {
   const events: TimelineEvent[] = [];
@@ -114,16 +102,9 @@ export function useLeadDetail(leadId?: number) {
   } = useQuery({
     queryKey: ['leadHistory', leadId],
     queryFn: async () => {
-      if (!leadId) return { chatHistory: [], timelineEvents: [] };
-      const [historyRes, agentHistoryRes] = await Promise.all([
-        api.getLeadHistory(leadId),
-        api.getLeadAgentHistory(leadId),
-      ]);
-      const merged = mergeMessages(
-        historyRes.messages || [],
-        agentHistoryRes.messages || []
-      );
-      return { chatHistory: merged };
+      if (!leadId) return { chatHistory: [] };
+      const historyRes = await api.getLeadAgentHistory(leadId);
+      return { chatHistory: historyRes.messages || [] };
     },
     enabled: !!leadId,
     // Poll every 3s for active leads; stop polling for finalized leads
@@ -134,7 +115,7 @@ export function useLeadDetail(leadId?: number) {
   const chatHistory = historyData?.chatHistory ?? [];
   const timelineEvents = lead ? buildTimelineEvents(chatHistory, lead) : [];
 
-  const loading = loadingLead || (loadingHistory && chatHistory.length === 0);
+  const loading = loadingLead;
   const error = leadError ? (leadError as Error).message : null;
 
   const refetch = useCallback(() => {
@@ -142,5 +123,5 @@ export function useLeadDetail(leadId?: number) {
     queryClient.invalidateQueries({ queryKey: ['leadHistory', leadId] });
   }, [queryClient, leadId]);
 
-  return { lead, chatHistory, timelineEvents, loading, error, refetch };
+  return { lead, chatHistory, timelineEvents, loading, loadingHistory, error, refetch };
 }

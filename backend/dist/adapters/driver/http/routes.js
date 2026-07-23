@@ -23,7 +23,10 @@ async function setupRoutes(app, controller) {
     app.delete('/api/follow-up-settings/:id', (req, rep) => controller.deleteFollowUpSetting(req, rep));
     // Leads
     app.get('/api/leads', (req, rep) => controller.getLeads(req, rep));
+    app.get('/api/leads/summary', (req, rep) => controller.getLeadsSummary(req, rep));
+    app.get('/api/leads/avatars', (req, rep) => controller.getBulkAvatars(req, rep));
     app.get('/api/leads/:id', (req, rep) => controller.getLeadById(req, rep));
+    app.get('/api/leads/:leadId/avatar', (req, rep) => controller.getLeadAvatar(req, rep));
     app.post('/api/leads', (req, rep) => controller.createLead(req, rep));
     app.put('/api/leads/:id', (req, rep) => controller.updateLead(req, rep));
     app.delete('/api/leads/:id', (req, rep) => controller.deleteLead(req, rep));

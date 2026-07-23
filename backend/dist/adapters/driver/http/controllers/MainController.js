@@ -160,15 +160,36 @@ class MainController {
     // ---------------------------------------------------------------------------
     async getLeads(request, reply) {
         try {
-            const { empresa, agente } = request.query;
+            const { empresa, agente, search, page, pageSize, status, month } = request.query;
             const data = await this.leadUsecases.getLeads(request.user, {
                 empresaId: empresa ? Number(empresa) : undefined,
-                agentId: agente ? Number(agente) : undefined
+                agentId: agente ? Number(agente) : undefined,
+                search: search || undefined,
+                page: page ? Number(page) : 1,
+                pageSize: pageSize ? Number(pageSize) : 30,
+                status: status || undefined,
+                month: month || undefined,
             });
             return data;
         }
         catch (err) {
             reply.status(500).send({ error: err.message || 'Failed to fetch leads.' });
+        }
+    }
+    async getLeadsSummary(request, reply) {
+        try {
+            const { empresa, agente, search, month } = request.query;
+            const data = await this.leadUsecases.getLeadsSummary(request.user, {
+                empresaId: empresa ? Number(empresa) : undefined,
+                agentId: agente ? Number(agente) : undefined,
+                search: search || undefined,
+                month: month || undefined,
+            });
+            return data;
+        }
+        catch (err) {
+            console.error('getLeadsSummary error:', err?.message, err?.stack);
+            reply.status(500).send({ error: err.message || 'Failed to fetch leads summary.' });
         }
     }
     async getLeadById(request, reply) {
@@ -181,6 +202,29 @@ class MainController {
         }
         catch (err) {
             reply.status(500).send({ error: err.message || 'Failed to fetch lead.' });
+        }
+    }
+    async getBulkAvatars(request, reply) {
+        try {
+            const { ids } = request.query;
+            if (!ids)
+                return {};
+            const idList = String(ids).split(',').map(Number).filter(Boolean);
+            const data = await this.leadUsecases.getBulkAvatars(request.user, idList);
+            return data;
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to fetch avatars.' });
+        }
+    }
+    async getLeadAvatar(request, reply) {
+        const leadId = parseInt(request.params.leadId, 10);
+        try {
+            const url = await this.leadUsecases.getLeadAvatar(request.user, leadId);
+            return { url };
+        }
+        catch (err) {
+            reply.status(500).send({ error: err.message || 'Failed to fetch lead avatar.' });
         }
     }
     async createLead(request, reply) {

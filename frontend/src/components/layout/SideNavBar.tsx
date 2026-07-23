@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Tab as AppTab } from '../../App';
 
+const ADD_LABELS: Record<AppTab, string> = {
+  leads: 'Novo Lead',
+  pessoas: 'Nova Pessoa',
+  agents: 'Novo Agente',
+  users: 'Novo Usuário',
+  empresas: 'Nova Empresa',
+  'follow-ups': 'Novo Follow-up',
+  messages: '',
+};
+
 interface SideNavBarProps {
   activeTab: AppTab;
   onTabChange: (tab: AppTab) => void;
@@ -134,7 +144,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
 
       {/* Bottom: Company Info + Logout */}
       <div className={`mt-auto pt-4 px-3 border-t border-border-low-contrast ${collapsed ? 'flex flex-col items-center px-0' : ''}`}>
-        {onNewLead && (
+        {onNewLead && ADD_LABELS[activeTab] && (
           <button
             onClick={onNewLead}
             className={`${
@@ -142,10 +152,10 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
                 ? 'w-10 h-10 flex items-center justify-center rounded-xl mt-4'
                 : 'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl mt-4'
             } bg-primary text-on-primary font-bold hover:opacity-90 transition-opacity cursor-pointer mb-4`}
-            title={collapsed ? 'Novo Lead' : undefined}
+            title={collapsed ? ADD_LABELS[activeTab] : undefined}
           >
             <span className="material-symbols-outlined text-sm">add</span>
-            {!collapsed && <span className="text-sm">Novo Lead</span>}
+            {!collapsed && <span className="text-sm">{ADD_LABELS[activeTab]}</span>}
           </button>
         )}
 

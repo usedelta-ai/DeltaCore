@@ -4,9 +4,9 @@ import { Empresa } from '../../../domain/entities/Empresa';
 import { Agent } from '../../../domain/entities/Agent';
 import { Lead } from '../../../domain/entities/Lead';
 import { FollowUpSetting, ChatMessage } from '../../../domain/entities/FollowUp';
-import { User } from '../../../domain/entities/User';
+import { User, UserSession } from '../../../domain/entities/User';
 import { Pessoa } from '../../../domain/entities/Pessoa';
-import { eq, and, sql, notInArray, desc, asc, or } from 'drizzle-orm';
+import { eq, and, sql, desc, asc, or, ilike, count, inArray } from 'drizzle-orm';
 import * as schema from '../../../db/schema';
 
 export class PostgresAdapter implements DBPort {
@@ -84,6 +84,7 @@ export class PostgresAdapter implements DBPort {
       search_data: schema.agents.search_data,
       validate: schema.agents.validate,
       validate_data: schema.agents.validate_data,
+      custom_properties_schema: schema.agents.custom_properties_schema,
       created_at: schema.agents.created_at,
       updated_at: schema.agents.updated_at,
       empresa_name: schema.empresa.name,
@@ -119,6 +120,7 @@ export class PostgresAdapter implements DBPort {
         search_data: agent.search_data ?? defaultJson,
         validate: agent.validate ?? false,
         validate_data: agent.validate_data ?? defaultJson,
+        custom_properties_schema: agent.custom_properties_schema ?? null,
       })
       .returning();
     return res[0] as any;
@@ -143,6 +145,7 @@ export class PostgresAdapter implements DBPort {
         search_data: agent.search_data !== undefined ? (agent.search_data ?? defaultJson) : (current.search_data ?? defaultJson),
         validate: agent.validate ?? current.validate,
         validate_data: agent.validate_data !== undefined ? (agent.validate_data ?? defaultJson) : (current.validate_data ?? defaultJson),
+        custom_properties_schema: agent.custom_properties_schema !== undefined ? agent.custom_properties_schema : current.custom_properties_schema,
         updated_at: new Date(),
       })
       .where(eq(schema.agents.id, id))
@@ -223,50 +226,132 @@ export class PostgresAdapter implements DBPort {
     return res.length > 0;
   }
 
-  async getLeads(companyId?: number, agentId?: number): Promise<Lead[]> {
-    const conditions: any[] = [
-      notInArray(schema.lead.status, ['CANCELADO'])
-    ];
+  async getLeads(companyId?: number, agentId?: number, filters?: { search?: string; page?: number; pageSize?: number; status?: string; month?: string }): Promise<{ data: Lead[]; total: number }> {
+    const conditions: string[] = ["l.status != 'CANCELADO'"];
+    const params: any[] = [];
+    let paramIndex = 1;
 
     if (companyId !== undefined) {
-      conditions.push(eq(schema.agents.empresa_id, companyId));
+      conditions.push(`a.empresa_id = $${paramIndex++}`);
+      params.push(companyId);
     }
     if (agentId !== undefined) {
-      conditions.push(eq(schema.lead.agent_id, agentId));
+      conditions.push(`l.agent_id = $${paramIndex++}`);
+      params.push(agentId);
+    }
+    if (filters?.status) {
+      conditions.push(`l.status = $${paramIndex++}`);
+      params.push(filters.status);
+    }
+    if (filters?.search) {
+      const searchPattern = `%${filters.search}%`;
+      conditions.push(`(l.name ILIKE $${paramIndex} OR l.remote_jid_alt ILIKE $${paramIndex})`);
+      params.push(searchPattern);
+      paramIndex++;
     }
 
-    const res = await db.select({
-      id: schema.lead.id,
-      agent_id: schema.lead.agent_id,
-      remote_jid_alt: schema.lead.remote_jid_alt,
-      name: schema.lead.name,
-      custom_properties: schema.lead.custom_properties,
-      status: schema.lead.status,
-      taken_over_at: schema.lead.taken_over_at,
-      take_over_expires_at: schema.lead.take_over_expires_at,
-      updated_at: schema.lead.updated_at,
-      created_at: schema.lead.created_at,
-      taken_motive: schema.lead.taken_motive,
-      value: schema.lead.value,
-      lastmessage: schema.lead.lastmessage,
-      follow_up_id: schema.lead.follow_up_id,
-      session_id: schema.lead.session_id,
-      pessoa_id: schema.lead.pessoa_id,
-      finalized_by: schema.lead.finalized_by,
-      finalized_by_name: schema.users.name,
-      translations: schema.agents.translations,
-      agent_name: schema.agents.name,
-      agent_status: schema.agents.status,
-      follow_up_message: schema.follow_up_settings.message,
-    })
-    .from(schema.lead)
-    .leftJoin(schema.agents, eq(schema.lead.agent_id, schema.agents.id))
-    .leftJoin(schema.follow_up_settings, eq(schema.lead.follow_up_id, schema.follow_up_settings.id))
-    .leftJoin(schema.users, eq(schema.lead.finalized_by, schema.users.id))
-    .where(and(...conditions))
-    .orderBy(desc(schema.lead.id));
+    if (filters?.month) {
+      const [year, monthNum] = filters.month.split('-');
+      const monthStart = `${year}-${monthNum}-01`;
+      const nextM = Number(monthNum) === 12 ? 1 : Number(monthNum) + 1;
+      const nextY = Number(monthNum) === 12 ? Number(year) + 1 : Number(year);
+      const monthEnd = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+      conditions.push(`(l.status = 'HUMANO' OR (l.created_at >= $${paramIndex}::timestamp AND l.created_at < $${paramIndex + 1}::timestamp))`);
+      params.push(monthStart, monthEnd);
+      paramIndex += 2;
+    }
 
-    return res as any[];
+    const whereClause = conditions.join(' AND ');
+
+    // Use window function to get total count in same query (avoids double query)
+    const selectColumns = `
+      l.id, l.agent_id, l.remote_jid_alt, l.name, l.custom_properties, l.status,
+      l.taken_over_at, l.take_over_expires_at, l.updated_at, l.created_at,
+      l.taken_motive, l.value, l.lastmessage, l.follow_up_id, l.session_id,
+      l.pessoa_id, l.finalized_by,
+      a.name as agent_name, a.translations, a.status as agent_status,
+      COUNT(*) OVER() as total_count
+    `;
+
+    let query = `
+      SELECT ${selectColumns}
+      FROM "lead" l
+      LEFT JOIN "agents" a ON a.id = l.agent_id
+      WHERE ${whereClause}
+      ORDER BY l.updated_at DESC, l.id DESC
+    `;
+
+    const shouldPaginate = !filters?.month && filters?.page && filters?.pageSize;
+    if (shouldPaginate) {
+      const offset = (filters.page! - 1) * filters.pageSize!;
+      query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      params.push(filters.pageSize, offset);
+    }
+
+    const result = await pool.query(query, params);
+    const rows = result.rows as any[];
+
+    const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
+    const data = rows.map(row => {
+      const { total_count, ...leadData } = row;
+      return leadData;
+    });
+
+    return { data: data as Lead[], total };
+  }
+
+  async getLeadsSummary(companyId?: number, agentId?: number, search?: string, month?: string): Promise<Record<string, { total: number; value: number }>> {
+    const conditions: string[] = ["l.status != 'CANCELADO'"];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (companyId !== undefined) {
+      conditions.push(`a.empresa_id = $${paramIndex++}`);
+      params.push(companyId);
+    }
+    if (agentId !== undefined) {
+      conditions.push(`l.agent_id = $${paramIndex++}`);
+      params.push(agentId);
+    }
+    if (search) {
+      const pattern = `%${search}%`;
+      conditions.push(`(l.name ILIKE $${paramIndex} OR l.remote_jid_alt ILIKE $${paramIndex})`);
+      params.push(pattern);
+      paramIndex++;
+    }
+    if (month) {
+      const [year, monthNum] = month.split('-');
+      const monthStart = `${year}-${monthNum}-01`;
+      const nextM = Number(monthNum) === 12 ? 1 : Number(monthNum) + 1;
+      const nextY = Number(monthNum) === 12 ? Number(year) + 1 : Number(year);
+      const monthEnd = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+      conditions.push(`(l.status = 'HUMANO' OR (l.created_at >= $${paramIndex}::timestamp AND l.created_at < $${paramIndex + 1}::timestamp))`);
+      params.push(monthStart, monthEnd);
+      paramIndex += 2;
+    }
+
+    const sql = `
+      SELECT l.status, COUNT(*)::int as total, COALESCE(SUM(COALESCE(l.value, 0)), 0) as value
+      FROM "lead" l
+      LEFT JOIN "agents" a ON a.id = l.agent_id
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY l.status
+    `;
+
+    const result = await pool.query(sql, params);
+    const rows = result.rows as Array<{ status: string; total: number; value: number }>;
+    const summary: Record<string, { total: number; value: number }> = {
+      NOVO: { total: 0, value: 0 },
+      HUMANO: { total: 0, value: 0 },
+      FINALIZADO: { total: 0, value: 0 },
+      CONCLUIDO: { total: 0, value: 0 },
+    };
+    for (const row of rows) {
+      if (summary[row.status]) {
+        summary[row.status] = { total: Number(row.total), value: Number(row.value) };
+      }
+    }
+    return summary;
   }
 
   async getLeadById(id: number): Promise<Lead | null> {
@@ -294,6 +379,32 @@ export class PostgresAdapter implements DBPort {
     .leftJoin(schema.users, eq(schema.lead.finalized_by, schema.users.id))
     .where(eq(schema.lead.id, id));
     return (res[0] as any) || null;
+  }
+
+  async getLeadsByIds(ids: number[]): Promise<Lead[]> {
+    if (ids.length === 0) return [];
+    const res = await db.select({
+      id: schema.lead.id,
+      agent_id: schema.lead.agent_id,
+      remote_jid_alt: schema.lead.remote_jid_alt,
+      name: schema.lead.name,
+      custom_properties: schema.lead.custom_properties,
+      status: schema.lead.status,
+      taken_over_at: schema.lead.taken_over_at,
+      take_over_expires_at: schema.lead.take_over_expires_at,
+      updated_at: schema.lead.updated_at,
+      created_at: schema.lead.created_at,
+      taken_motive: schema.lead.taken_motive,
+      value: schema.lead.value,
+      lastmessage: schema.lead.lastmessage,
+      follow_up_id: schema.lead.follow_up_id,
+      session_id: schema.lead.session_id,
+      pessoa_id: schema.lead.pessoa_id,
+      finalized_by: schema.lead.finalized_by,
+    })
+    .from(schema.lead)
+    .where(inArray(schema.lead.id, ids));
+    return res as any[];
   }
 
   async createLead(lead: Omit<Lead, 'id'>): Promise<Lead> {
@@ -489,6 +600,16 @@ export class PostgresAdapter implements DBPort {
     return (res[0] as any) || null;
   }
 
+  async getUserById(id: number): Promise<User | null> {
+    const res = await db.select()
+      .from(schema.users)
+      .where(and(
+        eq(schema.users.id, id),
+        eq(schema.users.active, true)
+      ));
+    return (res[0] as any) || null;
+  }
+
   async createUser(user: Omit<User, 'id'>): Promise<User> {
     const res = await db.insert(schema.users)
       .values({
@@ -498,6 +619,7 @@ export class PostgresAdapter implements DBPort {
         role: user.role,
         empresa_id: user.empresa_id || null,
         active: true,
+        must_change_password: user.must_change_password ?? false,
       })
       .returning();
     return res[0] as any;
@@ -515,7 +637,9 @@ export class PostgresAdapter implements DBPort {
         password: user.password ?? current.password,
         role: (user.role ?? current.role) as any,
         empresa_id: user.empresa_id !== undefined ? user.empresa_id : current.empresa_id,
+        avatar: user.avatar !== undefined ? user.avatar : current.avatar,
         active: user.active ?? current.active,
+        must_change_password: user.must_change_password ?? current.must_change_password,
         updated_at: new Date(),
       })
       .where(eq(schema.users.id, id))
@@ -529,6 +653,70 @@ export class PostgresAdapter implements DBPort {
       .where(eq(schema.users.id, id))
       .returning();
     return res.length > 0;
+  }
+
+  async updateUserPassword(userId: number, newPasswordHash: string): Promise<void> {
+    await db.update(schema.users)
+      .set({
+        password: newPasswordHash,
+        must_change_password: false,
+        updated_at: new Date(),
+      })
+      .where(eq(schema.users.id, userId));
+  }
+
+  // --- User Sessions ---
+
+  async createSession(session: Omit<UserSession, 'id'>): Promise<UserSession> {
+    const res = await db.insert(schema.userSessions)
+      .values({
+        user_id: session.user_id,
+        token: session.token,
+        ip_address: session.ip_address ?? null,
+        device_info: session.device_info ?? null,
+        expires_at: session.expires_at ?? null,
+        is_revoked: false,
+      })
+      .returning();
+    return res[0] as any;
+  }
+
+  async getSessionByToken(token: string): Promise<UserSession | null> {
+    const res = await db.select()
+      .from(schema.userSessions)
+      .where(eq(schema.userSessions.token, token));
+    return (res[0] as any) || null;
+  }
+
+  async revokeUserSessions(userId: number): Promise<void> {
+    await db.update(schema.userSessions)
+      .set({ is_revoked: true })
+      .where(and(
+        eq(schema.userSessions.user_id, userId),
+        eq(schema.userSessions.is_revoked, false)
+      ));
+  }
+
+  async revokeSession(sessionId: number): Promise<void> {
+    await db.update(schema.userSessions)
+      .set({ is_revoked: true })
+      .where(eq(schema.userSessions.id, sessionId));
+  }
+
+  async updateSessionActivity(sessionId: number): Promise<void> {
+    await db.update(schema.userSessions)
+      .set({ last_activity_at: new Date() })
+      .where(eq(schema.userSessions.id, sessionId));
+  }
+
+  async getActiveSessionsByUserId(userId: number): Promise<UserSession[]> {
+    const res = await db.select()
+      .from(schema.userSessions)
+      .where(and(
+        eq(schema.userSessions.user_id, userId),
+        eq(schema.userSessions.is_revoked, false)
+      ));
+    return res as any[];
   }
 
   async getLeadHistoryChanges(leadId: number): Promise<any[]> {
