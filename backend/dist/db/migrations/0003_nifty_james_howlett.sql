@@ -1,0 +1,2 @@
+ALTER TABLE "lead" ADD COLUMN "finalized_by" integer;--> statement-breakpoint
+ALTER TABLE "lead" ADD CONSTRAINT "lead_finalized_by_users_id_fk" FOREIGN KEY ("finalized_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
