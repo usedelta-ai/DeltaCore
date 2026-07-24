@@ -1,6 +1,6 @@
 services:
   backend:
-    image: ghcr.io/${REPO_OWNER:-wellingtonhellstromramos}/delta_admin/backend:latest
+    image: ghcr.io/${REPO_OWNER:-usedelta-ai}/deltacore/backend:latest
     ports:
       - "${PORT:-8088}:8088"
     environment:
@@ -15,7 +15,7 @@ services:
     restart: always
 
   frontend:
-    image: ghcr.io/${REPO_OWNER:-wellingtonhellstromramos}/delta_admin/frontend:latest
+    image: ghcr.io/${REPO_OWNER:-usedelta-ai}/deltacore/frontend:latest
     ports:
       - "8080:80"
     restart: always
