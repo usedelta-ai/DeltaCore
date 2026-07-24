@@ -566,8 +566,8 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
       }
       const prevRole = (prev.role || '').toLowerCase();
       if (prevRole === 'system_event' && role === 'system_event') {
-        const a = new Date(prev.createdAt || prev.created_at);
-        const b = new Date(current.createdAt || current.created_at);
+        const a = new Date(prev.createdAt);
+        const b = new Date(current.createdAt);
         const sameMinute = a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate() && a.getHours() === b.getHours() && a.getMinutes() === b.getMinutes();
         const sameContent = String(prev.content ?? '') === String(current.content ?? '');
         if (sameMinute && sameContent) {

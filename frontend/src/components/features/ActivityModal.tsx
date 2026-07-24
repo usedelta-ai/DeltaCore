@@ -75,7 +75,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ events, leadName, 
   const renderDescription = (desc: string) => {
     const match = desc.match(/^(Alteração de (.+?)): de "(.+?)" para "(.+?)"(.*)$/);
     if (match) {
-      const [, prefix, field, oldVal, newVal, suffix] = match;
+      const [, , field, oldVal, newVal, suffix] = match;
       return (
         <>
           <strong>{field}</strong>: de &ldquo;<strong>{oldVal}</strong>&rdquo; para &ldquo;<strong>{newVal}</strong>&rdquo;{suffix}
