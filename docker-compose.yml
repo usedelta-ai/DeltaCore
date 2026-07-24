@@ -1,8 +1,6 @@
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/${REPO_OWNER:-wellingtonhellstromramos}/delta_admin/backend:latest
     ports:
       - "${PORT:-8088}:8088"
     environment:
@@ -17,12 +15,7 @@ services:
     restart: always
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=${VITE_API_URL:-http://localhost:8088}
-        - VITE_BOARD_URL=${VITE_BOARD_URL}
+    image: ghcr.io/${REPO_OWNER:-wellingtonhellstromramos}/delta_admin/frontend:latest
     ports:
       - "8080:80"
     restart: always
