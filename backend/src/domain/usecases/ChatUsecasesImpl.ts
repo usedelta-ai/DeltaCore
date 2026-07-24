@@ -310,15 +310,28 @@ export class ChatUsecasesImpl implements ChatUsecases {
     const isFinalized = lead.status === 'FINALIZADO' || lead.status === 'CONCLUIDO';
 
     if ((isHuman || isFinalized) && lead.taken_over_at) {
+      // Find the user who changed the lead to HUMANO from history logs
+      const humanTakeoverLog = historyLogs.find(
+        (log: any) => log.field_name === 'status' && log.new_value === 'HUMANO' && log.user_name
+      );
+      const takeoverUserName = humanTakeoverLog?.user_name || null;
+      const takeoverUserId = humanTakeoverLog?.user_id || null;
+      const takeoverUserAvatar = humanTakeoverLog?.user_avatar || null;
+
       systemEvents.push({
         id: `system-human-${lead.id}`,
         type: 'system_event',
         event: 'human_takeover',
-        content: lead.taken_motive
-          ? `🔁 Atendimento humano — ${lead.taken_motive}`
-          : '🔁 Atendimento humano iniciado',
+        content: takeoverUserName
+          ? `🔁 Atendimento humano iniciado por ${takeoverUserName}`
+          : lead.taken_motive
+            ? `🔁 Atendimento humano — ${lead.taken_motive}`
+            : '🔁 Atendimento humano iniciado',
         role: 'system_event',
         createdAt: new Date(lead.taken_over_at),
+        user_name: takeoverUserName,
+        user_id: takeoverUserId,
+        user_avatar: takeoverUserAvatar,
       });
     }
 
@@ -388,6 +401,8 @@ export class ChatUsecasesImpl implements ChatUsecases {
           content: `Alteração de ${fieldName}: de "${log.old_value || '-'}" para "${log.new_value || '-'}" por ${who}`,
           role: 'system_event',
           createdAt: new Date(log.created_at),
+          user_name: log.user_name || null,
+          user_avatar: log.user_avatar || null,
         });
       }
     } catch (_) {}

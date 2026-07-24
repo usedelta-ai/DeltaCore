@@ -731,6 +731,7 @@ export class PostgresAdapter implements DBPort {
       new_value: schema.lead_history.new_value,
       created_at: schema.lead_history.created_at,
       user_name: schema.users.name,
+      user_avatar: schema.users.avatar,
       agent_name: schema.agents.name
     })
     .from(schema.lead_history)

@@ -72,6 +72,19 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ events, leadName, 
     return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const renderDescription = (desc: string) => {
+    const match = desc.match(/^(Alteração de (.+?)): de "(.+?)" para "(.+?)"(.*)$/);
+    if (match) {
+      const [, prefix, field, oldVal, newVal, suffix] = match;
+      return (
+        <>
+          <strong>{field}</strong>: de &ldquo;<strong>{oldVal}</strong>&rdquo; para &ldquo;<strong>{newVal}</strong>&rdquo;{suffix}
+        </>
+      );
+    }
+    return desc;
+  };
+
   const handleExport = () => {
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
       + ["Data,Hora,Tipo,Evento,Descricao"].join(",") + "\n"
@@ -220,7 +233,7 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ events, leadName, 
                               
                               {event.description && (
                                 <p className="text-body-md text-on-surface-variant leading-relaxed mb-3">
-                                  {event.description}
+                                  {renderDescription(event.description)}
                                 </p>
                               )}
 
@@ -242,10 +255,14 @@ export const ActivityModal: React.FC<ActivityModalProps> = ({ events, leadName, 
                                   </span>
                                 )}
                                 
-                                {/* Extracts operator name from taken_motive / motive description if present */}
-                                {event.description && event.description.includes(' por ') && (
-                                  <span className="px-2.5 py-0.5 bg-surface-container-high text-on-surface-variant text-[11px] font-bold rounded-full">
-                                    Ação por: {event.description.split(' por ').pop()?.replace(/\.$/, '')}
+                                {event.user_name && (
+                                  <span className="px-2 py-0.5 bg-surface-container-high text-on-surface-variant text-[11px] font-bold rounded-full flex items-center gap-1.5">
+                                    {event.avatarSrc ? (
+                                      <img src={event.avatarSrc} className="w-4 h-4 rounded-full object-cover" alt="" />
+                                    ) : (
+                                      <span className="material-symbols-outlined text-[12px]">person</span>
+                                    )}
+                                    {event.user_name}
                                   </span>
                                 )}
                               </div>

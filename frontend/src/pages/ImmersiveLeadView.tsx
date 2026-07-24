@@ -14,6 +14,7 @@ interface ImmersiveLeadViewProps {
   onBack?: () => void;
   systemLogo?: string | null;
   userName?: string;
+  userAvatar?: string | null;
   isSuperAdmin?: boolean;
   systemName?: string;
   onTabChange?: (tab: any) => void;
@@ -23,6 +24,7 @@ interface ImmersiveLeadViewProps {
   hasWritePermission?: boolean;
   agents?: Agent[];
   onPessoaClick?: (pessoaId: number) => void;
+  appVersion?: string;
 }
 
 export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
@@ -39,6 +41,8 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
   hasWritePermission = true,
   agents = [],
   onPessoaClick,
+  userAvatar,
+  appVersion,
 }) => {
   const { lead, chatHistory, timelineEvents, loading, loadingHistory, error, refetch } = useLeadDetail(leadId);
 
@@ -235,6 +239,7 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
         collapsed={isSidebarCollapsed}
         onToggleCollapse={onToggleSidebarCollapse}
         onLogout={onLogout}
+        appVersion={appVersion}
       />
 
       {/* Main Content with dynamic margin for sidebar collapse */}
@@ -337,6 +342,7 @@ export const ImmersiveLeadView: React.FC<ImmersiveLeadViewProps> = ({
             onViewAllTimeline={() => setShowActivityModal(true)}
             onUpdateLead={handleUpdateLead}
             hasWritePermission={hasWritePermission}
+            userAvatar={userAvatar}
             isSuperAdmin={isSuperAdmin}
             onPessoaClick={onPessoaClick}
             formatCurrency={formatCurrency}

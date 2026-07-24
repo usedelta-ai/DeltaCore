@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { ChatMessageBubble } from '../ui/ChatMessageBubble';
 import { MediaMessageRenderer } from './MediaMessageRenderer';
 import { ConversationDivider } from './ConversationDivider';
@@ -33,6 +33,7 @@ interface TeamChatPanelProps {
   formatCurrency?: (val: number | null) => string;
   formatDate?: (dateStr: string | null | undefined) => string;
   loadingMessages?: boolean;
+  userAvatar?: string | null;
 }
 
 function isMediaMessage(msg: ChatMessage): boolean {
@@ -80,6 +81,7 @@ function getMessageSender(
   userName: string | undefined,
   agentName: string | undefined,
   systemLogo?: string | null,
+  userAvatar?: string | null,
 ): { type: 'ai' | 'attendant' | 'lead'; author: string; avatarIcon: string; avatarSrc?: string } {
   const role = (msg.role || '').toLowerCase();
   const source = (msg.source || '').toLowerCase();
@@ -90,7 +92,10 @@ function getMessageSender(
     return { type: 'ai', author: agentName || 'Assistente IA', avatarIcon: 'smart_toy', avatarSrc: systemLogo || undefined };
   }
   if (isAttendant) {
-    return { type: 'attendant', author: userName || currentUserName || 'Atendente', avatarIcon: 'person' };
+    const avatarSrc = userAvatar
+      ? (userAvatar.startsWith('data:') ? userAvatar : `data:image/png;base64,${userAvatar}`)
+      : undefined;
+    return { type: 'attendant', author: userName || currentUserName || 'Atendente', avatarIcon: 'person', avatarSrc };
   }
   return { type: 'lead', author: leadName || 'Lead', avatarIcon: 'person' };
 }
@@ -142,6 +147,7 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
   formatCurrency: _formatCurrency,
   formatDate,
   loadingMessages = false,
+  userAvatar,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatBodyRef = useRef<HTMLDivElement>(null);
@@ -185,11 +191,9 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<LeadStatus>('NOVO');
   const [agentId, setAgentId] = useState<number>(0);
-  const [source, setSource] = useState('');
   const [customProps, setCustomProps] = useState<{ id: string; key: string; value: string }[]>([]);
 
   // Find agent translations and schema
@@ -231,15 +235,12 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
     setAgentId(lead.agent_id || 0);
 
     const cProps = lead.custom_properties || {};
-    setEmail(cProps.email || '');
-    setSource(cProps.source || '');
 
     // Initialize custom properties: merge schema fields with existing values
     const existingKeys = new Set<string>();
     const customList: { id: string; key: string; value: string }[] = [];
 
     for (const [k, v] of Object.entries(cProps)) {
-      if (k === 'email' || k === 'source') continue;
       existingKeys.add(k);
       customList.push({
         id: Math.random().toString(36).substr(2, 9),
@@ -292,9 +293,6 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
     } else {
       // It's a key inside custom_properties
       const updatedProps = { ...(lead.custom_properties || {}) };
-      if (field === 'email') updatedProps.email = currentVal || null;
-      else if (field === 'source') updatedProps.source = currentVal || null;
-
       triggerSave({ custom_properties: updatedProps });
     }
   };
@@ -359,10 +357,7 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
 
   const saveCustomProps = (targetPropsList = customProps) => {
     if (!lead) return;
-    const updatedProps: Record<string, any> = {
-      email: email || null,
-      source: source || null,
-    };
+    const updatedProps: Record<string, any> = {};
     targetPropsList.forEach(item => {
       if (item.key.trim()) {
         // Try parsing booleans before saving
@@ -550,7 +545,40 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const filteredMessages = messages.filter(shouldDisplayMessage);
+  const filteredMessages = useMemo(() => messages.filter(shouldDisplayMessage), [messages]);
+
+  const hasFinalDivider = leadStatus === 'CONCLUIDO' || leadStatus === 'FINALIZADO';
+
+  const visibleMessages = useMemo(() => {
+    const result: ChatMessage[] = [];
+    for (let i = 0; i < filteredMessages.length; i++) {
+      const current = filteredMessages[i];
+      const role = (current.role || '').toLowerCase();
+
+      if (role === 'system_event' && hasFinalDivider && getSystemEventType(current) === 'finalized') {
+        continue;
+      }
+
+      const prev = result[result.length - 1];
+      if (!prev) {
+        result.push(current);
+        continue;
+      }
+      const prevRole = (prev.role || '').toLowerCase();
+      if (prevRole === 'system_event' && role === 'system_event') {
+        const a = new Date(prev.createdAt || prev.created_at);
+        const b = new Date(current.createdAt || current.created_at);
+        const sameMinute = a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate() && a.getHours() === b.getHours() && a.getMinutes() === b.getMinutes();
+        const sameContent = String(prev.content ?? '') === String(current.content ?? '');
+        if (sameMinute && sameContent) {
+          result[result.length - 1] = current;
+          continue;
+        }
+      }
+      result.push(current);
+    }
+    return result;
+  }, [filteredMessages, hasFinalDivider]);
 
   const renderMessage = (msg: ChatMessage, idx: number) => {
     const role = (msg.role || '').toLowerCase();
@@ -567,7 +595,7 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
       );
     }
 
-    const sender = getMessageSender(msg, leadName, currentUserName, userName, agentName, systemLogo);
+    const sender = getMessageSender(msg, leadName, currentUserName, userName, agentName, systemLogo, userAvatar);
     // Inject the lead's WhatsApp profile picture for incoming lead messages
     if (sender.type === 'lead' && leadAvatarSrc) {
       sender.avatarSrc = leadAvatarSrc;
@@ -660,7 +688,7 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
           </span>
         </div>
 
-        {filteredMessages.length === 0 && (
+        {visibleMessages.length === 0 && (
           <div className="text-center py-12 text-on-surface-variant">
             <span className="material-symbols-outlined text-5xl mb-4 block">chat_bubble_outline</span>
             <p>Nenhuma mensagem nesta conversa</p>
@@ -668,7 +696,7 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
         )}
 
         <div className="space-y-6">
-          {filteredMessages.map((msg, idx) => renderMessage(msg, idx))}
+          {visibleMessages.map((msg, idx) => renderMessage(msg, idx))}
           {getFinalDivider()}
         </div>
 
@@ -790,20 +818,6 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
                     )}
                   </div>
 
-                  {/* Email */}
-                  <div className="bg-surface-container-low border border-border-low-contrast rounded-lg p-3">
-                    <span className="text-label-md text-on-surface-variant uppercase">Email</span>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      onBlur={() => handleTextBlur('email', email, lead?.custom_properties?.email || '')}
-                      disabled={!hasWritePermission || !isSuperAdmin}
-                      placeholder="Não informado"
-                      className="w-full bg-transparent border-none p-0 text-body-md font-medium mt-1 focus:ring-0 focus:outline-none disabled:opacity-75 text-on-surface"
-                    />
-                  </div>
-
                   {/* Valor Estimado */}
                   <div className="bg-surface-container-low border border-border-low-contrast rounded-lg p-3">
                     <span className="text-label-md text-on-surface-variant uppercase">Valor Estimado</span>
@@ -853,20 +867,6 @@ export const TeamChatPanel: React.FC<TeamChatPanelProps> = ({
                       onChange={e => handleSelectChange('agent_id', e.target.value)}
                       disabled={!hasWritePermission || !isSuperAdmin}
                       variant="minimal"
-                    />
-                  </div>
-
-                  {/* Origem */}
-                  <div className="bg-surface-container-low border border-border-low-contrast rounded-lg p-3">
-                    <span className="text-label-md text-on-surface-variant uppercase">Origem</span>
-                    <input
-                      type="text"
-                      value={source}
-                      onChange={e => setSource(e.target.value)}
-                      onBlur={() => handleTextBlur('source', source, lead?.custom_properties?.source || '')}
-                      disabled={!hasWritePermission || !isSuperAdmin}
-                      placeholder="Não informada"
-                      className="w-full bg-transparent border-none p-0 text-body-md font-medium mt-1 focus:ring-0 focus:outline-none disabled:opacity-75 text-on-surface"
                     />
                   </div>
 

@@ -809,6 +809,8 @@ export default function App() {
           hasWritePermission={hasWritePermission}
           agents={getFilteredAgents()}
           onPessoaClick={setSelectedPessoaId}
+          userAvatar={user?.avatar}
+          appVersion={pkg.version}
         />
         {selectedPessoaId !== null && (
           <PessoaModal

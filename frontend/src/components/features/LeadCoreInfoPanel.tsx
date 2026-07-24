@@ -70,11 +70,9 @@ export const LeadCoreInfoPanel: React.FC<LeadCoreInfoPanelProps> = ({
   // Input states
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [value, setValue] = useState('');
   const [status, setStatus] = useState<LeadStatus>('NOVO');
   const [agentId, setAgentId] = useState<number>(0);
-  const [source, setSource] = useState('');
 
   // Custom properties list state: { key: string, value: string }
   const [customProps, setCustomProps] = useState<{ id: string; key: string; value: string }[]>([]);
@@ -117,15 +115,12 @@ export const LeadCoreInfoPanel: React.FC<LeadCoreInfoPanelProps> = ({
     setAgentId(lead.agent_id || 0);
 
     const cProps = lead.custom_properties || {};
-    setEmail(cProps.email || '');
-    setSource(cProps.source || '');
 
     // Initialize custom properties: merge schema fields with existing values
     const existingKeys = new Set<string>();
     const customList: { id: string; key: string; value: string }[] = [];
 
     for (const [k, v] of Object.entries(cProps)) {
-      if (k === 'email' || k === 'source') continue;
       existingKeys.add(k);
       customList.push({
         id: Math.random().toString(36).substr(2, 9),
@@ -173,9 +168,6 @@ export const LeadCoreInfoPanel: React.FC<LeadCoreInfoPanelProps> = ({
     } else {
       // It's a key inside custom_properties
       const updatedProps = { ...(lead.custom_properties || {}) };
-      if (field === 'email') updatedProps.email = currentVal || null;
-      else if (field === 'source') updatedProps.source = currentVal || null;
-
       triggerSave({ custom_properties: updatedProps });
     }
   };
@@ -213,10 +205,7 @@ export const LeadCoreInfoPanel: React.FC<LeadCoreInfoPanelProps> = ({
   };
 
   const saveCustomProps = (targetPropsList = customProps) => {
-    const updatedProps: Record<string, any> = {
-      email: email || null,
-      source: source || null,
-    };
+    const updatedProps: Record<string, any> = {};
     targetPropsList.forEach(item => {
       if (item.key.trim()) {
         // Try parsing booleans before saving
@@ -318,20 +307,6 @@ export const LeadCoreInfoPanel: React.FC<LeadCoreInfoPanelProps> = ({
             />
           </div>
 
-          {/* Email */}
-          <div className="group">
-            <label className="block text-label-md font-label-md text-on-surface-variant mb-1 ml-1">Email</label>
-            <input
-              className="w-full bg-surface-container-lowest border border-border-low-contrast rounded-xl px-4 py-2 text-body-md focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none disabled:opacity-70"
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              onBlur={() => handleTextBlur('email', email, lead.custom_properties?.email || '')}
-              disabled={!hasWritePermission || !isSuperAdmin}
-              placeholder="Não informado"
-            />
-          </div>
-
           {/* Valor Estimado */}
           <div className="group">
             <label className="block text-label-md font-label-md text-on-surface-variant mb-1 ml-1">Valor Estimado</label>
@@ -377,20 +352,6 @@ export const LeadCoreInfoPanel: React.FC<LeadCoreInfoPanelProps> = ({
               value={agentId}
               onChange={e => handleSelectChange('agent_id', e.target.value)}
               disabled={!hasWritePermission || !isSuperAdmin}
-            />
-          </div>
-
-          {/* Origem */}
-          <div className="group">
-            <label className="block text-label-md font-label-md text-on-surface-variant mb-1 ml-1">Origem</label>
-            <input
-              className="w-full bg-surface-container-lowest border border-border-low-contrast rounded-xl px-4 py-2 text-body-md focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none disabled:opacity-70"
-              type="text"
-              value={source}
-              onChange={e => setSource(e.target.value)}
-              onBlur={() => handleTextBlur('source', source, lead.custom_properties?.source || '')}
-              disabled={!hasWritePermission || !isSuperAdmin}
-              placeholder="Não informada"
             />
           </div>
 

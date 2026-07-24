@@ -11,6 +11,7 @@ export type TimelineEvent = {
   icon?: string;
   avatarSrc?: string;
   description?: string;
+  user_name?: string | null;
 };
 
 
@@ -40,6 +41,10 @@ function buildTimelineEvents(merged: ChatMessage[], lead: Lead): TimelineEvent[]
       type = 'system';
     }
 
+    const userAvatar = sev.user_avatar
+      ? (sev.user_avatar.startsWith('data:') ? sev.user_avatar : `data:image/png;base64,${sev.user_avatar}`)
+      : undefined;
+
     events.push({
       id: String(sev.id),
       type,
@@ -54,6 +59,8 @@ function buildTimelineEvents(merged: ChatMessage[], lead: Lead): TimelineEvent[]
           : 'Alteração de Campo',
       icon,
       description: sev.content,
+      user_name: sev.user_name || null,
+      avatarSrc: userAvatar,
     });
   });
 
