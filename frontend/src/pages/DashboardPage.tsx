@@ -36,6 +36,7 @@ interface DashboardPageProps {
   onMonthChange?: (month: string) => void;
   hasWritePermission?: boolean;
   leadCreateTrigger?: number;
+  onLeadCreateAcknowledged?: () => void;
   isSuperAdmin?: boolean;
   currentUserEmpresaId?: number | null;
 }
@@ -106,6 +107,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   month,
   onMonthChange,
   leadCreateTrigger = 0,
+  onLeadCreateAcknowledged,
   isSuperAdmin = true,
   currentUserEmpresaId,
 }) => {
@@ -123,6 +125,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   useEffect(() => {
     if (leadCreateTrigger > 0) {
       setShowCreateModal(true);
+      onLeadCreateAcknowledged?.();
     }
   }, [leadCreateTrigger]);
 

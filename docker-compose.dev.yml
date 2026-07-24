@@ -6,6 +6,8 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+    ports:
+      - "8088:8088"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - PORT=8088
@@ -17,14 +19,6 @@ services:
       - host.docker.internal:host-gateway
     networks:
       - delta
-    deploy:
-      labels:
-        - traefik.enable=true
-        - traefik.http.routers.backend.rule=Host(`api.${DOMAIN:-delta.vps-kinghost.net}`)
-        - traefik.http.routers.backend.entrypoints=websecure
-        - traefik.http.routers.backend.tls.certresolver=letsencryptresolver
-        - traefik.http.services.backend.loadbalancer.server.port=8088
-
   frontend:
     build:
       context: ./frontend
@@ -32,19 +26,13 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    ports:
+      - "5173:5173"
     environment:
-      - VITE_API_URL=${VITE_API_URL:-https://api.${DOMAIN:-delta.vps-kinghost.net}}
+      - VITE_API_URL=${VITE_API_URL}
       - VITE_BOARD_URL=${VITE_BOARD_URL}
     networks:
       - delta
-    deploy:
-      labels:
-        - traefik.enable=true
-        - traefik.http.routers.frontend.rule=Host(`app.${DOMAIN:-delta.vps-kinghost.net}`)
-        - traefik.http.routers.frontend.entrypoints=websecure
-        - traefik.http.routers.frontend.tls.certresolver=letsencryptresolver
-        - traefik.http.services.frontend.loadbalancer.server.port=5173
-
 networks:
   delta:
     external: true

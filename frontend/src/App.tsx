@@ -11,6 +11,7 @@ import { useLeads } from './hooks/useLeads';
 import { useFollowUps } from './hooks/useFollowUps';
 
 // Pages
+import pkg from '../package.json';
 import { EmpresasPage } from './pages/EmpresasPage';
 import { AgentsPage } from './pages/AgentsPage';
 import { FollowUpsPage } from './pages/FollowUpsPage';
@@ -37,7 +38,7 @@ export default function App() {
 
   const isSuperAdmin = user?.role === 'superadmin';
   const companyId = user?.empresa_id || null;
-  const hasWritePermission = user?.role !== 'employee';
+  const hasWritePermission = true;
 
   const getTenantBase64FromUrl = (): string | null => {
     const parts = window.location.pathname.split('/').filter(Boolean);
@@ -647,6 +648,10 @@ export default function App() {
     refetchLeads();
   };
 
+  const handleNewLeadAcknowledged = () => {
+    setLeadCreateTrigger(0);
+  };
+
   const handleNewLead = () => {
     setLeadViewMode('dashboard');
     setLeadCreateTrigger(prev => prev + 1);
@@ -700,6 +705,14 @@ export default function App() {
     }
     setSelectedImmersiveLeadId(null);
   };
+
+  // Auto-select single agent in kanban filter
+  useEffect(() => {
+    const myAgents = getFilteredAgents();
+    if (!filterAgentId && myAgents.length === 1) {
+      setFilterAgentId(myAgents[0].id);
+    }
+  }, [agents, filterAgentId, companyId, isSuperAdmin]);
 
   // Refresh user data (including avatar) on mount
   useEffect(() => {
@@ -821,6 +834,7 @@ export default function App() {
         }}
         onLogout={handleLogout}
         userName={user?.name}
+        appVersion={pkg.version}
       />
       <TopAppBar
         onProfileClick={() => setIsProfileModalOpen(true)}
@@ -855,6 +869,7 @@ onNewLead={handleAddButton}
             onMonthChange={setLeadsMonth}
             hasWritePermission={hasWritePermission}
             leadCreateTrigger={leadCreateTrigger}
+            onLeadCreateAcknowledged={handleNewLeadAcknowledged}
             isSuperAdmin={isSuperAdmin}
             currentUserEmpresaId={companyId}
           />

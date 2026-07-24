@@ -85,7 +85,7 @@ export const AgentsPage: React.FC<AgentsPageProps> = ({
           <h1 className="text-headline-lg font-bold text-on-surface tracking-tight">Gestão de Agentes</h1>
           <p className="text-body-md text-on-surface-variant">Configure e monitore seus assistentes virtuais inteligentes.</p>
         </div>
-        {hasWritePermission && (
+        {isSuperAdmin && (
           <button
             onClick={() => {
               setIsFormOpen(true);
@@ -178,7 +178,7 @@ export const AgentsPage: React.FC<AgentsPageProps> = ({
                             </div>
                           </div>
                           <div className="flex space-x-1">
-                            {hasWritePermission && (
+                            {isSuperAdmin && (
                               <>
                                 <button
                                   onClick={() => openEditForm(ag)}
@@ -235,7 +235,7 @@ export const AgentsPage: React.FC<AgentsPageProps> = ({
                           <div className="p-3 bg-white/40 rounded-lg border border-dashed border-outline-variant text-[12px] italic text-on-surface-variant">
                             Agente inativo. Clique em <strong>Reativar</strong> para reconfigurar.
                           </div>
-                        ) : ag.instance_name && !evoStatus.connected && hasWritePermission ? (
+                        ) : ag.instance_name && !evoStatus.connected && isSuperAdmin ? (
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => showEvolutionQrCode(ag.instance_name)}

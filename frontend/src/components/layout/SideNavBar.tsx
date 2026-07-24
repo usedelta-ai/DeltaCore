@@ -22,6 +22,7 @@ interface SideNavBarProps {
   onToggleCollapse?: () => void;
   onLogout?: () => void;
   userName?: string;
+  appVersion?: string;
 }
 
 const navItems = [
@@ -45,6 +46,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
   onToggleCollapse,
   onLogout,
   userName,
+  appVersion,
 }) => {
   const [logoError, setLogoError] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -157,6 +159,15 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
             <span className="material-symbols-outlined text-sm">add</span>
             {!collapsed && <span className="text-sm">{ADD_LABELS[activeTab]}</span>}
           </button>
+        )}
+
+        {/* Version */}
+        {appVersion && (
+          <div className={`mb-2 ${collapsed ? 'text-center' : 'px-3'}`}>
+            <span className="text-[10px] text-on-surface-variant/50 font-mono">
+              {collapsed ? 'v' : 'v'} {appVersion}
+            </span>
+          </div>
         )}
 
         {/* Logout Button */}
