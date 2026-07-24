@@ -146,7 +146,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
 
       {/* Bottom: Company Info + Logout */}
       <div className={`mt-auto pt-4 px-3 border-t border-border-low-contrast ${collapsed ? 'flex flex-col items-center px-0' : ''}`}>
-        {onNewLead && ADD_LABELS[activeTab] && (
+        {onNewLead && ADD_LABELS[activeTab] && (activeTab !== 'agents' || isSuperAdmin) && (
           <button
             onClick={onNewLead}
             className={`${

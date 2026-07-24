@@ -12,6 +12,9 @@ import type { Lead } from '../services/api';
 interface PessoasPageProps {
   onPessoaClick: (id: number) => void;
   leads?: Lead[];
+  createTrigger?: number;
+  onCreateAcknowledged?: () => void;
+  isSuperAdmin?: boolean;
 }
 
 const formatDate = (dateStr?: string | null) => {
@@ -27,7 +30,13 @@ const formatDate = (dateStr?: string | null) => {
   }
 };
 
-export const PessoasPage: React.FC<PessoasPageProps> = ({ onPessoaClick, leads = [] }) => {
+export const PessoasPage: React.FC<PessoasPageProps> = ({
+  onPessoaClick,
+  leads = [],
+  createTrigger = 0,
+  onCreateAcknowledged,
+  isSuperAdmin = true,
+}) => {
   const { pessoas, loading, error, createPessoa, isCreating } = usePessoas();
 
   const pessoaLeads = useMemo(() => {
@@ -52,6 +61,13 @@ export const PessoasPage: React.FC<PessoasPageProps> = ({ onPessoaClick, leads =
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
+
+  useEffect(() => {
+    if (createTrigger > 0) {
+      setIsCreateOpen(true);
+      onCreateAcknowledged?.();
+    }
+  }, [createTrigger]);
   const [newPhone, setNewPhone] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -70,14 +86,18 @@ export const PessoasPage: React.FC<PessoasPageProps> = ({ onPessoaClick, leads =
   };
 
   const filteredPessoas = useMemo(() => {
-    if (!searchQuery.trim()) return pessoas;
+    let result = pessoas;
+    if (!isSuperAdmin) {
+      result = result.filter(p => p.id in pessoaLeads);
+    }
+    if (!searchQuery.trim()) return result;
     const q = searchQuery.toLowerCase();
-    return pessoas.filter(
+    return result.filter(
       p =>
         p.name.toLowerCase().includes(q) ||
         p.phone.toLowerCase().includes(q)
     );
-  }, [pessoas, searchQuery]);
+  }, [pessoas, searchQuery, pessoaLeads, isSuperAdmin]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;

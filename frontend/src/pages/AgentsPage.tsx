@@ -8,7 +8,6 @@ import { Pagination } from '../components/ui/Pagination';
 
 interface AgentsPageProps {
   getGroupedAgents: () => Array<{ empresaId: number; empresaName: string; empresaLogo: string | null; agents: Agent[] }>;
-  hasWritePermission: boolean;
   isSuperAdmin: boolean;
   empresas: Empresa[];
   showEvolutionQrCode: (instanceName: string) => void;
@@ -30,7 +29,6 @@ interface AgentsPageProps {
 
 export const AgentsPage: React.FC<AgentsPageProps> = ({
   getGroupedAgents,
-  hasWritePermission,
   isSuperAdmin,
   empresas,
   showEvolutionQrCode,

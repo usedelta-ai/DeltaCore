@@ -120,6 +120,7 @@ export default function App() {
   const [showInactive, _setShowInactive] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [leadCreateTrigger, setLeadCreateTrigger] = useState(0);
+  const [pessoaCreateTrigger, setPessoaCreateTrigger] = useState(0);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [_error, setError] = useState<string | null>(null);
@@ -657,9 +658,15 @@ export default function App() {
     setLeadCreateTrigger(prev => prev + 1);
   };
 
+  const handlePessoaCreateAcknowledged = () => {
+    setPessoaCreateTrigger(0);
+  };
+
   const handleAddButton = () => {
     if (activeTab === 'leads') {
       handleNewLead();
+    } else if (activeTab === 'pessoas') {
+      setPessoaCreateTrigger(prev => prev + 1);
     } else {
       openCreateForm();
     }
@@ -905,7 +912,6 @@ onNewLead={handleAddButton}
         {activeTab === 'agents' && (
           <AgentsPage
             getGroupedAgents={getGroupedAgents}
-            hasWritePermission={hasWritePermission}
             isSuperAdmin={isSuperAdmin}
             empresas={empresas}
             showEvolutionQrCode={showEvolutionQrCode}
@@ -976,7 +982,13 @@ onNewLead={handleAddButton}
         )}
 
         {activeTab === 'pessoas' && (
-          <PessoasPage onPessoaClick={setSelectedPessoaId} leads={getFilteredLeads()} />
+          <PessoasPage
+            onPessoaClick={setSelectedPessoaId}
+            leads={getFilteredLeads()}
+            createTrigger={pessoaCreateTrigger}
+            onCreateAcknowledged={handlePessoaCreateAcknowledged}
+            isSuperAdmin={isSuperAdmin}
+          />
         )}
       </main>
       {selectedPessoaId !== null && (
