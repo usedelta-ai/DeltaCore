@@ -879,7 +879,15 @@ export const LeadsPage: React.FC<LeadsPageProps> = ({
           /* Kanban Board View */
           <div className="kanban-board" style={{ gridTemplateColumns: 'repeat(4, minmax(280px, 1fr))' }}>
             {columns.map(col => {
-              const leadsInCol = filteredLeads.filter(l => l.status === col.status);
+              const leadsInCol = filteredLeads
+                .filter(l => l.status === col.status)
+                .sort((a, b) => {
+                  const dateCmp = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                  if (dateCmp !== 0) return dateCmp;
+                  const aMsg = a.lastmessage ?? '';
+                  const bMsg = b.lastmessage ?? '';
+                  return bMsg.localeCompare(aMsg);
+                });
               const isOver = draggedOverCol === col.status;
 
               // Calculate column revenue

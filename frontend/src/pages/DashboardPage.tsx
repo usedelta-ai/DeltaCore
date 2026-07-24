@@ -174,7 +174,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   }, [triggerRefresh, autoRefreshPaused]);
 
   const cardData = useMemo(() => {
-    let result = leads.map(lead => mapLeadToCardData(lead, agentsMap));
+    const sorted = [...leads].sort((a, b) => {
+      const dateCmp = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (dateCmp !== 0) return dateCmp;
+      const aMsg = a.lastmessage ?? '';
+      const bMsg = b.lastmessage ?? '';
+      return bMsg.localeCompare(aMsg);
+    });
+    let result = sorted.map(lead => mapLeadToCardData(lead, agentsMap));
 
     if (selectedStatus) {
       result = result.filter(card => card.badge.label === selectedStatus);
