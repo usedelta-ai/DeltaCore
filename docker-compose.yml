@@ -1,8 +1,6 @@
 services:
   backend:
     image: ghcr.io/${REPO_OWNER:-usedelta-ai}/deltacore/backend:latest
-    ports:
-      - "${PORT:-8088}:8088"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - PORT=8088
@@ -11,11 +9,30 @@ services:
       - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
       - PASS_KEY=${PASS_KEY}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: always
+      - host.docker.internal:host-gateway
+    networks:
+      - delta
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.backend.rule=Host(`api.${DOMAIN:-delta.vps-kinghost.net}`)
+        - traefik.http.routers.backend.entrypoints=websecure
+        - traefik.http.routers.backend.tls.certresolver=letsencryptresolver
+        - traefik.http.services.backend.loadbalancer.server.port=8088
 
   frontend:
     image: ghcr.io/${REPO_OWNER:-usedelta-ai}/deltacore/frontend:latest
-    ports:
-      - "8080:80"
-    restart: always
+    networks:
+      - delta
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.frontend.rule=Host(`app.${DOMAIN:-delta.vps-kinghost.net}`)
+        - traefik.http.routers.frontend.entrypoints=websecure
+        - traefik.http.routers.frontend.tls.certresolver=letsencryptresolver
+        - traefik.http.services.frontend.loadbalancer.server.port=80
+
+networks:
+  delta:
+    external: true
+    name: Delta
