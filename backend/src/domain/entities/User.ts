@@ -10,6 +10,7 @@ export interface User {
   must_change_password?: boolean;
   created_at?: Date;
   updated_at?: Date;
+  last_activity_at?: Date | null;
 }
 
 export interface UserSession {

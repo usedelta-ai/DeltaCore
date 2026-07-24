@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import type { User } from '../services/api';
 
-export function useUsers(token: string | null) {
+export function useUsers(token: string | null, filterEmpresaId?: string) {
   const queryClient = useQueryClient();
 
   const {
@@ -11,8 +11,8 @@ export function useUsers(token: string | null) {
     error: queryError,
     refetch,
   } = useQuery<User[]>({
-    queryKey: ['users'],
-    queryFn: () => api.getUsers(),
+    queryKey: ['users', filterEmpresaId],
+    queryFn: () => api.getUsers(filterEmpresaId),
     enabled: !!token,
     staleTime: 1000 * 30,
   });

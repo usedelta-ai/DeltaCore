@@ -28,7 +28,8 @@ const roleLabel: Record<string, string> = {
 };
 
 export const UsersPage: React.FC<UsersPageProps> = ({ empresas, token }) => {
-  const { users, loading, error: queryError, createUser, updateUser, deleteUser, isActionLoading } = useUsers(token);
+  const [filterEmpresaId, setFilterEmpresaId] = useState<string>('');
+  const { users, loading, error: queryError, createUser, updateUser, deleteUser, isActionLoading } = useUsers(token, filterEmpresaId || undefined);
 
   const [formError, setFormError] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -137,7 +138,20 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas, token }) => {
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <label className="text-label-md font-label-md text-on-surface-variant">Filtrar por Empresa:</label>
+            <select
+              className="px-3 py-2 text-body-sm rounded-xl border border-border-low-contrast bg-white text-on-surface outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/10"
+              value={filterEmpresaId}
+              onChange={e => setFilterEmpresaId(e.target.value)}
+            >
+              <option value="">Todas as Empresas</option>
+              {empresas.map(emp => (
+                <option key={emp.id} value={emp.id}>{emp.name}</option>
+              ))}
+            </select>
+          </div>
           <Button variant="primary" onClick={openCreateForm}>
             Novo Usuário
           </Button>
@@ -163,6 +177,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas, token }) => {
                     <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Papel</th>
                     <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Empresa Vinculada</th>
                     <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Status</th>
+                    <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Último Acesso</th>
                     <th className="text-left px-4 py-3 text-label-md font-label-md text-on-surface-variant">Ações</th>
                   </tr>
                 </thead>
@@ -177,10 +192,22 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas, token }) => {
                           <Badge variant={roleBadgeVariant[u.role]}>{roleLabel[u.role]}</Badge>
                         </td>
                         <td className="px-4 py-3 text-body-sm text-on-surface-variant">
-                          {company ? company.name : <em className="text-muted-foreground">Geral (Sem vínculo)</em>}
+                          {company ? (
+                            <div className="flex items-center gap-2">
+                              {company.logo && (
+                                <img src={`data:image/png;base64,${company.logo}`} alt="" className="w-6 h-6 rounded-full object-cover" />
+                              )}
+                              <span>{company.name}</span>
+                            </div>
+                          ) : (
+                            <em className="text-muted-foreground">Geral (Sem vínculo)</em>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={u.active ? 'success' : 'danger'}>{u.active ? 'Ativo' : 'Inativo'}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-body-sm text-on-surface-variant">
+                          {u.last_activity_at ? new Date(u.last_activity_at).toLocaleString('pt-BR') : 'Nunca acessou'}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
@@ -206,7 +233,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({ empresas, token }) => {
                   })}
                   {users.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center py-6 text-on-surface-variant">
+                      <td colSpan={7} className="text-center py-6 text-on-surface-variant">
                         Nenhum usuário cadastrado
                       </td>
                     </tr>

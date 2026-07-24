@@ -46,9 +46,9 @@ export class UserUsecasesImpl implements UserUsecases {
     return crypto.randomBytes(48).toString('hex');
   }
 
-  async getUsers(user: UserSession): Promise<User[]> {
+  async getUsers(user: UserSession, companyId?: number): Promise<User[]> {
     this.checkSuperAdmin(user);
-    return this.db.getUsers();
+    return this.db.getUsers(companyId);
   }
 
   async getUserById(user: UserSession, id: number): Promise<User | null> {

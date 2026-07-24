@@ -284,7 +284,11 @@ export const api = {
   getMe: () => request<any>('/api/auth/me'),
 
   // Users
-  getUsers: () => request<User[]>('/api/users'),
+  getUsers: (empresa?: string) => {
+    const params = new URLSearchParams();
+    if (empresa) params.append('empresa', empresa);
+    return request<User[]>(`/api/users?${params.toString()}`);
+  },
   createUser: (data: Partial<User>) => request<User>('/api/users', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -311,4 +315,5 @@ export interface User {
   active: boolean;
   password?: string;
   created_at?: string;
+  last_activity_at?: string | null;
 }

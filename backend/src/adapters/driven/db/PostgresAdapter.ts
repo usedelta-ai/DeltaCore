@@ -579,14 +579,31 @@ export class PostgresAdapter implements DBPort {
   }
 
   async getUsers(companyId?: number): Promise<User[]> {
-    const conditions = [eq(schema.users.active, true)];
+    const conditions: any[] = [];
     if (companyId !== undefined) {
       conditions.push(eq(schema.users.empresa_id, companyId));
     }
-    const res = await db.select()
-      .from(schema.users)
-      .where(and(...conditions))
-      .orderBy(desc(schema.users.id));
+    const res = await db.select({
+      id: schema.users.id,
+      name: schema.users.name,
+      email: schema.users.email,
+      password: schema.users.password,
+      role: schema.users.role,
+      empresa_id: schema.users.empresa_id,
+      avatar: schema.users.avatar,
+      active: schema.users.active,
+      must_change_password: schema.users.must_change_password,
+      created_at: schema.users.created_at,
+      updated_at: schema.users.updated_at,
+      last_activity_at: sql`(
+        SELECT us.last_activity_at FROM user_sessions us
+        WHERE us.user_id = users.id AND us.is_revoked = false
+        ORDER BY us.last_activity_at DESC LIMIT 1
+      )`,
+    })
+    .from(schema.users)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(schema.users.id));
     return res as any[];
   }
 

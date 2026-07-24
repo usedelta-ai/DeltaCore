@@ -446,7 +446,9 @@ export class MainController {
 
   async getUsers(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const data = await this.userUsecases.getUsers(request.user!);
+      const { empresa } = request.query as any;
+      const companyId = empresa ? Number(empresa) : undefined;
+      const data = await this.userUsecases.getUsers(request.user!, companyId);
       return data;
     } catch (err: any) {
       reply.status(500).send({ error: err.message || 'Failed to fetch users.' });

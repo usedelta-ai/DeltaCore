@@ -17,7 +17,7 @@ export interface LoginResponse {
 }
 
 export interface UserUsecases {
-  getUsers(user: UserSession): Promise<User[]>;
+  getUsers(user: UserSession, companyId?: number): Promise<User[]>;
   getUserById(user: UserSession, id: number): Promise<User | null>;
   createUser(user: UserSession, userData: Omit<User, 'id'>): Promise<User>;
   updateUser(user: UserSession, id: number, userData: Partial<User>): Promise<User>;
