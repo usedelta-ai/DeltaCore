@@ -50,7 +50,7 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/frontend:latest
             ${{ env.IMAGE_PREFIX }}/frontend:${{ github.sha }}
           build-args: |
-            VITE_API_URL=${{ vars.VITE_API_URL || 'http://localhost:8088' }}
+            VITE_API_URL=${{ vars.VITE_API_URL || 'https://api.delta.vps-kinghost.net' }}
             VITE_BOARD_URL=${{ vars.VITE_BOARD_URL }}
 
       - name: Trigger Portainer redeploy

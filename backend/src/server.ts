@@ -21,7 +21,11 @@ const app = fastify({ logger: true, bodyLimit: 5 * 1024 * 1024 });
 
 // Enable CORS
 app.register(cors, {
-  origin: '*',
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'https://app.delta.vps-kinghost.net',
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-role', 'x-user-company-id'],
 });
