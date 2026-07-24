@@ -49,6 +49,8 @@ jobs:
             VITE_BOARD_URL=${{ vars.VITE_BOARD_URL }}
 
       - name: Trigger Portainer redeploy
-        if: ${{ secrets.PORTAINER_WEBHOOK_URL != '' }}
+        env:
+          PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        if: env.PORTAINER_WEBHOOK_URL != ''
         run: |
-          curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
+          curl -X POST "$PORTAINER_WEBHOOK_URL"
